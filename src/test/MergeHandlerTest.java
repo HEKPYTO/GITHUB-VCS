@@ -7,6 +7,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import utils.HashUtils;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.io.File;
 import java.nio.file.Files;
@@ -17,25 +18,35 @@ import static org.junit.jupiter.api.Assertions.*;
 class MergeHandlerTest {
     private MergeHandler mergeHandler;
     private VersionManager versionManager;
+
     @TempDir
     Path tempDir;
 
     @BeforeEach
-    void setUp() throws FileOperationException {
+    void setUp() throws FileOperationException, IOException {
         versionManager = new VersionManager(tempDir.toString());
         FileTracker fileTracker = new FileTracker(tempDir.toString());
         DiffGenerator diffGenerator = new DiffGenerator(versionManager, fileTracker);
         mergeHandler = new MergeHandler(versionManager, diffGenerator);
+        Files.createDirectories(tempDir.resolve(".vcs").resolve("objects"));
+    }
+
+    private String storeFile(String name, String content) throws Exception {
+        File file = tempDir.resolve(name).toFile();
+        Files.writeString(file.toPath(), content);
+        String hash = HashUtils.calculateFileHash(file);
+        Files.copy(file.toPath(), tempDir.resolve(".vcs").resolve("objects").resolve(hash),
+                StandardCopyOption.REPLACE_EXISTING);
+        return hash;
     }
 
     @Test
     void testMergeWithoutConflicts() throws Exception {
-        // Test simple merge with no conflicts
-        String baseHash = createAndStoreFile("test.txt", "base content\ncommon line");
-        String baseVersion = createVersion("Base", Map.of("test.txt", baseHash));
-
-        String sourceHash = createAndStoreFile("test.txt", "modified content\ncommon line");
-        String sourceVersion = createVersion("Source", Map.of("test.txt", sourceHash));
+        String filePath = tempDir.resolve("test.txt").toString();
+        String baseVersion = createVersion("Base", Map.of(filePath,
+                storeFile("test.txt", "base content\ncommon line")));
+        String sourceVersion = createVersion("Source", Map.of(filePath,
+                storeFile("test.txt", "modified content\ncommon line")));
 
         assertTrue(mergeHandler.merge(sourceVersion, baseVersion));
         assertTrue(mergeHandler.getConflicts().isEmpty());
@@ -43,12 +54,11 @@ class MergeHandlerTest {
 
     @Test
     void testMergeWithConflicts() throws Exception {
-        // Test merge with conflicting changes
-        String baseHash = createAndStoreFile("test.txt", "base\ncommon\nend");
-        String baseVersion = createVersion("Base", Map.of("test.txt", baseHash));
-
-        String sourceHash = createAndStoreFile("test.txt", "source\ncommon\nend");
-        String sourceVersion = createVersion("Source", Map.of("test.txt", sourceHash));
+        String filePath = tempDir.resolve("test.txt").toString();
+        String baseVersion = createVersion("Base", Map.of(filePath,
+                storeFile("test.txt", "base\ncommon\nend")));
+        String sourceVersion = createVersion("Source", Map.of(filePath,
+                storeFile("test.txt", "source\ncommon\nend")));
 
         assertFalse(mergeHandler.merge(sourceVersion, baseVersion));
         assertFalse(mergeHandler.getConflicts().isEmpty());
@@ -57,83 +67,84 @@ class MergeHandlerTest {
 
     @Test
     void testMergeWithInvalidVersions() {
-        // Test merge with non-existent versions
         assertThrows(VersionException.class,
                 () -> mergeHandler.merge("nonexistent1", "nonexistent2"));
     }
 
     @Test
     void testConflictResolutionKeepSource() throws Exception {
-        // Test resolving conflict by keeping source version
         setupConflictScenario();
 
+        String filePath = tempDir.resolve("test.txt").toString();
         ConflictResolution resolution = new ConflictResolution(
-                "test.txt",
+                filePath,
                 new HashMap<>(),
                 ConflictResolution.ResolutionStrategy.KEEP_SOURCE
         );
 
-        mergeHandler.resolveConflict("test.txt", resolution);
+        mergeHandler.resolveConflict(filePath, resolution);
         assertTrue(mergeHandler.getConflicts().isEmpty());
     }
 
     @Test
     void testConflictResolutionKeepTarget() throws Exception {
-        // Test resolving conflict by keeping target version
         setupConflictScenario();
 
+        String filePath = tempDir.resolve("test.txt").toString();
         ConflictResolution resolution = new ConflictResolution(
-                "test.txt",
+                filePath,
                 new HashMap<>(),
                 ConflictResolution.ResolutionStrategy.KEEP_TARGET
         );
 
-        mergeHandler.resolveConflict("test.txt", resolution);
+        mergeHandler.resolveConflict(filePath, resolution);
         assertTrue(mergeHandler.getConflicts().isEmpty());
     }
 
     @Test
     void testConflictResolutionCustom() throws Exception {
-        // Test resolving conflict with custom content
         setupConflictScenario();
 
+        String filePath = tempDir.resolve("test.txt").toString();
         Map<Integer, String> customResolutions = new HashMap<>();
         customResolutions.put(0, "custom resolution");
 
         ConflictResolution resolution = new ConflictResolution(
-                "test.txt",
+                filePath,
                 customResolutions,
                 ConflictResolution.ResolutionStrategy.CUSTOM
         );
 
-        mergeHandler.resolveConflict("test.txt", resolution);
+        mergeHandler.resolveConflict(filePath, resolution);
         assertTrue(mergeHandler.getConflicts().isEmpty());
     }
 
     @Test
     void testResolvingNonexistentConflict() {
-        // Test attempting to resolve a non-existent conflict
+        String filePath = tempDir.resolve("nonexistent.txt").toString();
         ConflictResolution resolution = new ConflictResolution(
-                "nonexistent.txt",
+                filePath,
                 new HashMap<>(),
                 ConflictResolution.ResolutionStrategy.KEEP_SOURCE
         );
 
         assertThrows(MergeConflictException.class,
-                () -> mergeHandler.resolveConflict("nonexistent.txt", resolution));
+                () -> mergeHandler.resolveConflict(filePath, resolution));
     }
 
     @Test
     void testMultipleFileConflicts() throws Exception {
-        // Test handling conflicts in multiple files
+        String filePath1 = tempDir.resolve("file1.txt").toString();
+        String filePath2 = tempDir.resolve("file2.txt").toString();
+
         Map<String, String> baseHashes = new HashMap<>();
-        baseHashes.put("file1.txt", createAndStoreFile("file1.txt", "base1"));
-        baseHashes.put("file2.txt", createAndStoreFile("file2.txt", "base2"));
+        baseHashes.put(filePath1, storeFile("file1.txt", "base1"));
+        baseHashes.put(filePath2, storeFile("file2.txt", "base2"));
         String baseVersion = createVersion("Base", baseHashes);
 
         Map<String, String> sourceHashes = new HashMap<>();
-        sourceHashes.put("file1.txt", createAndStoreFile("file1.txt", "source1"));
-        sourceHashes.put("file2.txt", createAndStoreFile("file2.txt", "source2"));
+        sourceHashes.put(filePath1, storeFile("file1.txt", "source1"));
+        sourceHashes.put(filePath2, storeFile("file2.txt", "source2"));
         String sourceVersion = createVersion("Source", sourceHashes);
 
         assertFalse(mergeHandler.merge(sourceVersion, baseVersion));
@@ -141,30 +152,27 @@ class MergeHandlerTest {
     }
 
     private void setupConflictScenario() throws Exception {
-        String baseHash = createAndStoreFile("test.txt", "base\ncommon");
-        String baseVersion = createVersion("Base", Map.of("test.txt", baseHash));
-
-        String sourceHash = createAndStoreFile("test.txt", "source\ncommon");
-        String sourceVersion = createVersion("Source", Map.of("test.txt", sourceHash));
-
+        String filePath = tempDir.resolve("test.txt").toString();
+        String baseVersion = createVersion("Base", Map.of(filePath,
+                storeFile("test.txt", "base\ncommon")));
+        String sourceVersion = createVersion("Source", Map.of(filePath,
+                storeFile("test.txt", "source\ncommon")));
         mergeHandler.merge(sourceVersion, baseVersion);
     }
 
-    private String createAndStoreFile(String name, String content) throws Exception {
-        File file = tempDir.resolve(name).toFile();
-        Files.writeString(file.toPath(), content);
-        String hash = HashUtils.calculateFileHash(file);
+    @Test
+    void testMergeWithEmptyFiles() throws Exception {
+        String filePath = tempDir.resolve("test.txt").toString();
+        String baseVersion = createVersion("Base", Map.of(filePath,
+                storeFile("test.txt", "")));
+        String sourceVersion = createVersion("Source", Map.of(filePath,
+                storeFile("test.txt", "new content")));
 
-        // Ensure objects directory exists and copy file
-        Path objectsDir = tempDir.resolve(".vcs").resolve("objects");
-        Files.createDirectories(objectsDir);
-        Files.copy(file.toPath(), objectsDir.resolve(hash), StandardCopyOption.REPLACE_EXISTING);
-
-        return hash;
+        assertFalse(mergeHandler.merge(sourceVersion, baseVersion));
+        assertFalse(mergeHandler.getConflicts().isEmpty());
     }
 
     private String createVersion(String message, Map<String, String> fileHashes) throws Exception {
         return versionManager.createVersion(message, fileHashes);
     }
 }
-
