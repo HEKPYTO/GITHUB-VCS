@@ -1,9 +1,8 @@
 package simulation;
 
 import impl.*;
-import models.*;
-import exceptions.*;
-import java.io.File;
+import model.*;
+
 import java.nio.file.*;
 import java.util.*;
 
@@ -73,40 +72,40 @@ public class VCS {
             // Show version history
             System.out.println("\n=== Version History ===");
             for (VersionInfo version : vcs.getVersionHistory()) {
-                System.out.println(String.format("- %s: %s (by %s at %s)",
+                System.out.printf("- %s: %s (by %s at %s)%n",
                         version.getVersionId(),
                         version.getMessage(),
                         version.getAuthor(),
-                        version.getTimestamp()));
+                        version.getTimestamp());
             }
 
             // Generate diff
             System.out.println("\n=== Diff Between Versions ===");
             DiffResult diff = vcs.getDiffGenerator().getDiff(version1, version2);
 
-            for (Map.Entry<String, ChangedLines> entry : diff.getChanges().entrySet()) {
+            for (Map.Entry<String, ChangedLines> entry : diff.changes().entrySet()) {
                 System.out.println("\nChanges in: " + entry.getKey());
                 ChangedLines changes = entry.getValue();
 
                 if (!changes.getAdditions().isEmpty()) {
                     System.out.println("\nAdditions:");
                     for (LineChange addition : changes.getAdditions()) {
-                        System.out.println("+ " + addition.getNewContent());
+                        System.out.println("+ " + addition.newContent());
                     }
                 }
 
                 if (!changes.getDeletions().isEmpty()) {
                     System.out.println("\nDeletions:");
                     for (LineChange deletion : changes.getDeletions()) {
-                        System.out.println("- " + deletion.getOldContent());
+                        System.out.println("- " + deletion.oldContent());
                     }
                 }
 
                 if (!changes.getModifications().isEmpty()) {
                     System.out.println("\nModifications:");
                     for (LineChange modification : changes.getModifications()) {
-                        System.out.println("< " + modification.getOldContent());
-                        System.out.println("> " + modification.getNewContent());
+                        System.out.println("< " + modification.oldContent());
+                        System.out.println("> " + modification.newContent());
                     }
                 }
             }

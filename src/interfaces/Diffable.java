@@ -1,8 +1,8 @@
 package interfaces;
 
 import exceptions.VCSException;
-import models.ChangedLines;
-import models.DiffResult;
+import model.ChangedLines;
+import model.DiffResult;
 import java.util.Map;
 
 public interface Diffable {

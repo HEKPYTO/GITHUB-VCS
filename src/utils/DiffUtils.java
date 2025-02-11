@@ -1,6 +1,6 @@
 package utils;
 
-import models.LineChange;
+import model.LineChange;
 import java.util.*;
 
 public class DiffUtils {
@@ -9,16 +9,16 @@ public class DiffUtils {
         List<String> result = new ArrayList<>(originalLines);
 
         // Sort changes by line number in reverse order to apply from bottom to top
-        changes.sort((a, b) -> Integer.compare(b.getLineNumber(), a.getLineNumber()));
+        changes.sort((a, b) -> Integer.compare(b.lineNumber(), a.lineNumber()));
 
         for (LineChange change : changes) {
-            int lineIndex = change.getLineNumber() - 1;
-            switch (change.getType()) {
+            int lineIndex = change.lineNumber() - 1;
+            switch (change.type()) {
                 case ADDITION:
                     if (lineIndex >= result.size()) {
-                        result.add(change.getNewContent());
+                        result.add(change.newContent());
                     } else {
-                        result.add(lineIndex, change.getNewContent());
+                        result.add(lineIndex, change.newContent());
                     }
                     break;
 
@@ -30,7 +30,7 @@ public class DiffUtils {
 
                 case MODIFICATION:
                     if (lineIndex < result.size()) {
-                        result.set(lineIndex, change.getNewContent());
+                        result.set(lineIndex, change.newContent());
                     }
                     break;
             }

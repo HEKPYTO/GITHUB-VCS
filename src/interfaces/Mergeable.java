@@ -1,8 +1,8 @@
 package interfaces;
 
 import exceptions.VCSException;
-import models.ConflictInfo;
-import models.ConflictResolution;
+import model.ConflictInfo;
+import model.ConflictResolution;
 import java.util.List;
 
 public interface Mergeable {

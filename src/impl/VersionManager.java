@@ -1,7 +1,6 @@
 package impl;
 
-import models.*;
-import utils.*;
+import model.*;
 import exceptions.*;
 import java.io.*;
 import java.nio.file.*;
@@ -53,6 +52,10 @@ public class VersionManager {
     }
 
     public String createVersion(String message, Map<String, String> fileHashes) throws VCSException {
+        if (message == null) {
+            throw new VCSException("Version message cannot be null");
+        }
+
         try {
             VersionInfo version = new VersionInfo(message, System.getProperty("user.name"), new HashMap<>(fileHashes));
 

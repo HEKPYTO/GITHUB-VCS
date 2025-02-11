@@ -1,30 +1,19 @@
-package models;
+package model;
 
 import java.util.Map;
 import java.util.Collections;
 import java.util.HashMap;
 
-public class DiffResult {
-    private final String oldVersion;
-    private final String newVersion;
-    private final Map<String, ChangedLines> changes;
-
+public record DiffResult(String oldVersion, String newVersion, Map<String, ChangedLines> changes) {
     public DiffResult(String oldVersion, String newVersion, Map<String, ChangedLines> changes) {
         this.oldVersion = oldVersion;
         this.newVersion = newVersion;
         this.changes = new HashMap<>(changes);
     }
 
-    public Map<String, ChangedLines> getChanges() {
+    @Override
+    public Map<String, ChangedLines> changes() {
         return Collections.unmodifiableMap(changes);
-    }
-
-    public String getOldVersion() {
-        return oldVersion;
-    }
-
-    public String getNewVersion() {
-        return newVersion;
     }
 
     public boolean hasChanges() {

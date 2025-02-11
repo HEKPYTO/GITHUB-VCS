@@ -1,7 +1,7 @@
 package exceptions;
 
 import java.util.List;
-import models.ConflictInfo;
+import model.ConflictInfo;
 
 public class MergeConflictException extends VCSException {
     private final String sourceVersion;

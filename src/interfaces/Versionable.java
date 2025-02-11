@@ -1,7 +1,9 @@
 package interfaces;
 
 import exceptions.VCSException;
-import models.VersionInfo;
+import model.VersionInfo;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -9,7 +11,7 @@ import java.util.stream.Collectors;
 
 public interface Versionable {
     String createVersion(String message) throws VCSException;
-    void revertToVersion(String versionId) throws VCSException;
+    void revertToVersion(String versionId) throws VCSException, IOException;
     List<VersionInfo> getVersionHistory();
     VersionInfo getCurrentVersion();
 

@@ -1,9 +1,11 @@
 package impl;
 
 import interfaces.Diffable;
-import models.*;
+import model.*;
 import utils.*;
 import exceptions.*;
+
+import java.io.IOException;
 import java.util.*;
 import java.io.File;
 import java.nio.file.*;
@@ -107,8 +109,11 @@ public class DiffGenerator implements Diffable {
     private List<String> readFileLines(String hash) throws VCSException {
         try {
             Path objectPath = Paths.get(versionManager.getRepositoryPath(), ".vcs", "objects", hash);
+            if (!Files.exists(objectPath)) {
+                throw new FileOperationException("Object file not found: " + hash);
+            }
             return Files.readAllLines(objectPath);
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new FileOperationException("Failed to read file content for hash: " + hash, e);
         }
     }

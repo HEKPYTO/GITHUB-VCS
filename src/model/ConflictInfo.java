@@ -1,4 +1,4 @@
-package models;
+package model;
 
 import java.util.List;
 
@@ -18,12 +18,16 @@ public class ConflictInfo {
         this.status = ConflictStatus.UNRESOLVED;
     }
 
-    public record ConflictBlock(
-            int startLine,
-            int endLine,
-            String sourceContent,
-            String targetContent
-    ) {}
+    public record ConflictBlock(int startLine, int endLine, String sourceContent, String targetContent) {
+        public ConflictBlock {
+            if (startLine < 0 || endLine < startLine) {
+                throw new IllegalArgumentException("Invalid line range: startLine must be non-negative and ≤ endLine.");
+            }
+            if (sourceContent == null || targetContent == null) {
+                throw new IllegalArgumentException("Source and target content cannot be null.");
+            }
+        }
+    }
 
     public enum ConflictStatus {
         UNRESOLVED,

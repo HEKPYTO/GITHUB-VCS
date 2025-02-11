@@ -1,9 +1,10 @@
 package impl;
 
-import models.*;
+import model.*;
 import utils.*;
 import exceptions.*;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,26 +14,31 @@ public class FileTracker {
     private final Map<String, FileMetadata> fileMetadata;
     private final Set<String> trackedFiles;
 
-    public FileTracker(String repositoryPath) {
+    public FileTracker(String repositoryPath) throws FileOperationException {
         this.repositoryPath = repositoryPath;
         this.fileMetadata = new ConcurrentHashMap<>();
         this.trackedFiles = Collections.synchronizedSet(new HashSet<>());
+        try {
+            Files.createDirectories(Paths.get(repositoryPath, ".vcs", "objects"));
+        } catch (IOException e) {
+            throw new FileOperationException("Failed to initialize repository structure", e);
+        }
     }
 
-    public boolean trackFile(File file) throws VCSException {
+    public boolean trackFile(File file) throws VCSException, IOException {
         if (!file.exists() || !file.isFile()) {
             throw new FileOperationException("Invalid file: " + file.getPath());
         }
 
-        try {
-            String hash = storeFileContent(file);
-            FileMetadata metadata = new FileMetadata(file.getPath(), hash);
-            fileMetadata.put(file.getPath(), metadata);
-            trackedFiles.add(file.getPath());
-            return true;
-        } catch (Exception e) {
-            throw new FileOperationException("Failed to track file: " + file.getPath(), e);
-        }
+        String hash = HashUtils.calculateFileHash(file);
+        Path objectsPath = Paths.get(repositoryPath, ".vcs", "objects");
+        Files.copy(file.toPath(), objectsPath.resolve(hash), StandardCopyOption.REPLACE_EXISTING);
+
+        FileMetadata metadata = new FileMetadata(file.getPath(), hash);
+        fileMetadata.put(file.getPath(), metadata);
+        trackedFiles.add(file.getPath());
+
+        return true;
     }
 
     private String storeFileContent(File file) throws VCSException {
@@ -44,11 +50,13 @@ public class FileTracker {
             }
 
             Path objectFile = objectsPath.resolve(hash);
-            if (!Files.exists(objectFile)) {
-                Files.copy(file.toPath(), objectFile, StandardCopyOption.REPLACE_EXISTING);
+            synchronized(this) {
+                if (!Files.exists(objectFile)) {
+                    Files.copy(file.toPath(), objectFile, StandardCopyOption.REPLACE_EXISTING);
+                }
             }
             return hash;
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new FileOperationException("Failed to store file content: " + file.getPath(), e);
         }
     }

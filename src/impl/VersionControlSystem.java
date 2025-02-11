@@ -1,10 +1,15 @@
 package impl;
 
 import interfaces.*;
-import models.*;
+import model.*;
 import utils.*;
 import exceptions.*;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -54,17 +59,22 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
     }
 
     @Override
-    public boolean upload(File file) throws VCSException {
-        return fileTracker.trackFile(file);
+    public boolean upload(File file) throws VCSException, IOException {
+        boolean success = fileTracker.trackFile(file);
+        if (success) {
+            trackedFiles.add(file.getPath());
+            notifyFileChanged(file.getPath());
+        }
+        return success;
     }
 
     @Override
-    public boolean uploadDirectory(File directory) throws VCSException {
+    public boolean uploadDirectory(File directory) throws VCSException, IOException {
         if (!directory.isDirectory()) {
             throw new FileOperationException("Not a directory: " + directory.getPath());
         }
         boolean success = true;
-        for (File file : directory.listFiles()) {
+        for (File file : Objects.requireNonNull(directory.listFiles())) {
             if (file.isFile()) {
                 success &= upload(file);
             }
@@ -100,7 +110,7 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
     }
 
     @Override
-    public void revertToVersion(String versionId) throws VCSException {
+    public void revertToVersion(String versionId) throws VCSException, IOException {
         VersionInfo version = versionManager.getVersion(versionId);
         if (version == null) {
             throw new VersionException("Version not found: " + versionId);
@@ -109,9 +119,11 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
         for (Map.Entry<String, String> entry : version.getFileHashes().entrySet()) {
             String filePath = entry.getKey();
             String hash = entry.getValue();
-            File sourceFile = new File(repositoryPath + "/.vcs/objects/" + hash);
-            File targetFile = new File(filePath);
-            FileUtils.copyFile(sourceFile, targetFile);
+            Path sourceFile = Paths.get(repositoryPath, ".vcs", "objects", hash);
+            Path targetFile = Paths.get(filePath);
+
+            Files.createDirectories(targetFile.getParent());
+            Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
 
             FileMetadata metadata = fileMetadata.get(filePath);
             if (metadata != null) {
@@ -135,7 +147,7 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
     }
 
     @Override
-    public void trackFile(String filePath) throws VCSException {
+    public void trackFile(String filePath) throws VCSException, IOException {
         File file = new File(filePath);
         if (fileTracker.trackFile(file)) {
             trackedFiles.add(filePath);
