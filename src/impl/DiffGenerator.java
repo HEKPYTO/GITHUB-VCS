@@ -1,6 +1,7 @@
 package impl;
 
 import interfaces.Diffable;
+import interfaces.Mergeable;
 import model.*;
 import utils.*;
 import exceptions.*;
@@ -10,13 +11,15 @@ import java.util.*;
 import java.io.File;
 import java.nio.file.*;
 
-public class DiffGenerator implements Diffable {
+public class DiffGenerator implements Diffable, Mergeable {
     private final VersionManager versionManager;
     private final FileTracker fileTracker;
+    private final List<ConflictInfo> currentConflicts;
 
     public DiffGenerator(VersionManager versionManager, FileTracker fileTracker) {
         this.versionManager = versionManager;
         this.fileTracker = fileTracker;
+        this.currentConflicts = new ArrayList<>();
     }
 
     @Override
@@ -38,7 +41,6 @@ public class DiffGenerator implements Diffable {
             String newHash = newVer.getFileHashes().get(filePath);
 
             if (!Objects.equals(oldHash, newHash)) {
-                // At least one of oldHash or newHash exists since the file is in allFiles
                 ChangedLines changes = compareVersions(filePath, oldHash, newHash);
                 if (!changes.additions().isEmpty() || !changes.deletions().isEmpty() || !changes.modifications().isEmpty()) {
                     fileChanges.put(filePath, changes);
@@ -72,6 +74,80 @@ public class DiffGenerator implements Diffable {
         return new DiffResult("current", "working", changes);
     }
 
+    @Override
+    public Map<String, ChangedLines> getChangedLines(String filePath) throws VCSException {
+        Map<String, ChangedLines> changes = new HashMap<>();
+        FileMetadata metadata = fileTracker.getFileMetadata(filePath);
+
+        if (metadata != null) {
+            File file = new File(filePath);
+            String currentHash = HashUtils.calculateFileHash(file);
+            String storedHash = metadata.getCurrentHash();
+
+            if (!currentHash.equals(storedHash)) {
+                changes.put(filePath, compareVersions(filePath, storedHash, currentHash));
+            }
+        }
+
+        return changes;
+    }
+
+    @Override
+    public boolean merge(String sourceVersion, String targetVersion) throws VCSException {
+        VersionInfo sourceInfo = versionManager.getVersion(sourceVersion);
+        VersionInfo targetInfo = versionManager.getVersion(targetVersion);
+
+        if (sourceInfo == null || targetInfo == null) {
+            throw new VersionException("Invalid version IDs");
+        }
+
+        currentConflicts.clear();
+        Map<String, ChangedLines> diffChanges = getDiff(sourceVersion, targetVersion).changes();
+
+        for (Map.Entry<String, ChangedLines> entry : diffChanges.entrySet()) {
+            String filePath = entry.getKey();
+            ChangedLines changes = entry.getValue();
+
+            if (!changes.modifications().isEmpty()) {
+                List<ConflictInfo.ConflictBlock> conflicts = detectConflicts(changes);
+                if (!conflicts.isEmpty()) {
+                    currentConflicts.add(new ConflictInfo(
+                            filePath,
+                            sourceInfo.getFileHashes().get(filePath),
+                            targetInfo.getFileHashes().get(filePath),
+                            conflicts
+                    ));
+                }
+            }
+        }
+
+        return currentConflicts.isEmpty();
+    }
+
+    @Override
+    public List<ConflictInfo> getConflicts() {
+        return new ArrayList<>(currentConflicts);
+    }
+
+    @Override
+    public void resolveConflict(String filePath, ConflictResolution resolution) throws VCSException {
+        ConflictInfo conflict = findConflict(filePath);
+        if (conflict == null) {
+            throw new MergeConflictException("No conflict found for file: " + filePath);
+        }
+
+        List<String> mergedLines = applyResolution(conflict, resolution);
+        String newHash = HashUtils.calculateStringHash(String.join("\n", mergedLines));
+
+        Path objectPath = Paths.get(versionManager.getRepositoryPath(), ".vcs", "objects", newHash);
+        try {
+            Files.write(objectPath, mergedLines);
+            currentConflicts.remove(conflict);
+        } catch (IOException e) {
+            throw new FileOperationException("Failed to save resolved file", e);
+        }
+    }
+
     private ChangedLines compareVersions(String filePath, String oldHash, String newHash) throws VCSException {
         List<String> oldLines = oldHash != null ? readFileLines(oldHash) : new ArrayList<>();
         List<String> newLines = newHash != null ? readFileLines(newHash) : new ArrayList<>();
@@ -83,11 +159,9 @@ public class DiffGenerator implements Diffable {
         int oldIdx = 0, newIdx = 0;
         while (oldIdx < oldLines.size() || newIdx < newLines.size()) {
             if (oldIdx >= oldLines.size()) {
-                // All remaining new lines are additions
                 additions.add(new LineChange(newIdx + 1, null, newLines.get(newIdx), LineChange.ChangeType.ADDITION));
                 newIdx++;
             } else if (newIdx >= newLines.size()) {
-                // All remaining old lines are deletions
                 deletions.add(new LineChange(oldIdx + 1, oldLines.get(oldIdx), null, LineChange.ChangeType.DELETION));
                 oldIdx++;
             } else {
@@ -95,7 +169,6 @@ public class DiffGenerator implements Diffable {
                 String newLine = newLines.get(newIdx);
 
                 if (!oldLine.equals(newLine)) {
-                    // Lines are different - treat as a modification
                     modifications.add(new LineChange(oldIdx + 1, oldLine, newLine, LineChange.ChangeType.MODIFICATION));
                 }
                 oldIdx++;
@@ -118,21 +191,86 @@ public class DiffGenerator implements Diffable {
         }
     }
 
-    @Override
-    public Map<String, ChangedLines> getChangedLines(String filePath) throws VCSException {
-        Map<String, ChangedLines> changes = new HashMap<>();
-        FileMetadata metadata = fileTracker.getFileMetadata(filePath);
+    private ConflictInfo findConflict(String filePath) {
+        return currentConflicts.stream()
+                .filter(c -> c.getFilePath().equals(filePath))
+                .findFirst()
+                .orElse(null);
+    }
 
-        if (metadata != null) {
-            File file = new File(filePath);
-            String currentHash = HashUtils.calculateFileHash(file);
-            String storedHash = metadata.getCurrentHash();
+    private List<ConflictInfo.ConflictBlock> detectConflicts(ChangedLines changes) {
+        List<ConflictInfo.ConflictBlock> conflicts = new ArrayList<>();
+        Map<Integer, LineChange> modificationMap = new HashMap<>();
 
-            if (!currentHash.equals(storedHash)) {
-                changes.put(filePath, compareVersions(filePath, storedHash, currentHash));
-            }
+        for (LineChange mod : changes.modifications()) {
+            modificationMap.put(mod.lineNumber(), mod);
         }
 
-        return changes;
+        int startLine = -1;
+        int currentLine = -1;
+        StringBuilder sourceContent = new StringBuilder();
+        StringBuilder targetContent = new StringBuilder();
+
+        for (Map.Entry<Integer, LineChange> entry : modificationMap.entrySet()) {
+            int line = entry.getKey();
+            if (currentLine == -1 || line != currentLine + 1) {
+                if (currentLine != -1) {
+                    conflicts.add(new ConflictInfo.ConflictBlock(
+                            startLine, currentLine,
+                            sourceContent.toString(),
+                            targetContent.toString()
+                    ));
+                    sourceContent.setLength(0);
+                    targetContent.setLength(0);
+                }
+                startLine = line;
+            }
+            LineChange change = entry.getValue();
+            sourceContent.append(change.oldContent()).append('\n');
+            targetContent.append(change.newContent()).append('\n');
+            currentLine = line;
+        }
+
+        if (startLine != -1) {
+            conflicts.add(new ConflictInfo.ConflictBlock(
+                    startLine, currentLine,
+                    sourceContent.toString(),
+                    targetContent.toString()
+            ));
+        }
+
+        return conflicts;
+    }
+
+    private List<String> applyResolution(ConflictInfo conflict, ConflictResolution resolution) throws VCSException {
+        List<String> sourceLines = readFileLines(conflict.getSourceVersion());
+        List<String> resolvedLines = new ArrayList<>(sourceLines);
+
+        for (ConflictInfo.ConflictBlock block : conflict.getConflicts()) {
+            int startIdx = block.startLine() - 1;
+            int endIdx = block.endLine();
+
+            List<String> replacementLines;
+            switch (resolution.strategy()) {
+                case KEEP_SOURCE:
+                    continue;
+                case KEEP_TARGET:
+                    replacementLines = Arrays.asList(block.targetContent().split("\n"));
+                    break;
+                case CUSTOM:
+                    replacementLines = resolution.resolvedLines().entrySet().stream()
+                            .sorted(Map.Entry.comparingByKey())
+                            .map(Map.Entry::getValue)
+                            .toList();
+                    break;
+                default:
+                    throw new MergeConflictException("Invalid resolution strategy");
+            }
+
+            resolvedLines.subList(startIdx, endIdx).clear();
+            resolvedLines.addAll(startIdx, replacementLines);
+        }
+
+        return resolvedLines;
     }
 }

@@ -9,13 +9,11 @@ import java.io.File;
 
 public class MergeHandler implements Mergeable {
     private final VersionManager versionManager;
-    private final DiffGenerator diffGenerator;
     private final List<ConflictInfo> currentConflicts;
     private final String repositoryPath;
 
-    public MergeHandler(VersionManager versionManager, DiffGenerator diffGenerator) {
+    public MergeHandler(VersionManager versionManager) {
         this.versionManager = versionManager;
-        this.diffGenerator = diffGenerator;
         this.currentConflicts = new ArrayList<>();
         this.repositoryPath = versionManager.getRepositoryPath();
     }
@@ -31,7 +29,6 @@ public class MergeHandler implements Mergeable {
 
         currentConflicts.clear();
 
-        // For every file in the source version that also exists in the target, compare contents.
         for (Map.Entry<String, String> entry : sourceInfo.getFileHashes().entrySet()) {
             String filePath = entry.getKey();
             String sourceHash = entry.getValue();
@@ -55,18 +52,13 @@ public class MergeHandler implements Mergeable {
         return FileUtils.readLines(file);
     }
 
-    /**
-     * Iterates over all line indices (up to the maximum number of lines in either version)
-     * and groups consecutive differing lines into a block. When the block ends, the
-     * similarity between the two blocks is computed and, if below the threshold, a conflict is recorded.
-     */
     private List<ConflictInfo.ConflictBlock> findConflicts(List<String> sourceLines, List<String> targetLines) {
         List<ConflictInfo.ConflictBlock> conflicts = new ArrayList<>();
         int nSource = sourceLines.size();
         int nTarget = targetLines.size();
         int maxLines = Math.max(nSource, nTarget);
 
-        int blockStart = -1; // Indicates that no block is currently being collected.
+        int blockStart = -1;
         int blockEnd = -1;
 
         for (int i = 0; i < maxLines; i++) {
@@ -78,7 +70,6 @@ public class MergeHandler implements Mergeable {
                 }
                 blockEnd = i;
             } else {
-                // If we were in a differing block, finish it.
                 if (blockStart != -1) {
                     addConflictBlockIfNeeded(conflicts, sourceLines, targetLines, blockStart, blockEnd);
                     blockStart = -1;
@@ -86,7 +77,6 @@ public class MergeHandler implements Mergeable {
                 }
             }
         }
-        // If a block is active at the end of the file, finalize it.
         if (blockStart != -1) {
             addConflictBlockIfNeeded(conflicts, sourceLines, targetLines, blockStart, blockEnd);
         }
@@ -100,7 +90,7 @@ public class MergeHandler implements Mergeable {
         String sourceContent = getContentSlice(sourceLines, blockStart, blockEnd);
         String targetContent = getContentSlice(targetLines, blockStart, blockEnd);
         double similarity = calculateSimilarity(sourceContent, targetContent);
-        double threshold = 0.5; // If similarity is greater than or equal to threshold, auto-merge.
+        double threshold = 0.5;
         if (similarity < threshold) {
             conflicts.add(new ConflictInfo.ConflictBlock(blockStart, blockEnd, sourceContent, targetContent));
         }
@@ -112,7 +102,6 @@ public class MergeHandler implements Mergeable {
         return String.join("\n", lines.subList(start, Math.min(end + 1, lines.size())));
     }
 
-    // Calculate similarity based on the Levenshtein distance ratio.
     private double calculateSimilarity(String s1, String s2) {
         int distance = levenshteinDistance(s1, s2);
         int maxLen = Math.max(s1.length(), s2.length());
@@ -120,7 +109,6 @@ public class MergeHandler implements Mergeable {
         return 1.0 - ((double) distance / maxLen);
     }
 
-    // Standard Levenshtein distance calculation.
     private int levenshteinDistance(String s1, String s2) {
         int m = s1.length();
         int n = s2.length();

@@ -16,9 +16,8 @@ import java.util.function.Consumer;
 
 public class VersionControlSystem implements Uploadable, Versionable, Trackable {
     private final String repositoryPath;
-    private final Map<String, FileMetadata> fileMetadata;
+//    private final Map<String, FileMetadata> fileMetadata;
     private final List<VersionInfo> versionHistory;
-    private final Set<String> trackedFiles;
     private final List<Consumer<String>> fileChangeListeners;
     private final FileTracker fileTracker;
     private final VersionManager versionManager;
@@ -27,15 +26,14 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
 
     public VersionControlSystem(String repositoryPath) throws FileOperationException {
         this.repositoryPath = repositoryPath;
-        this.fileMetadata = new ConcurrentHashMap<>();
+//        this.fileMetadata = new ConcurrentHashMap<>();
         this.versionHistory = new ArrayList<>();
-        this.trackedFiles = new HashSet<>();
         this.fileChangeListeners = new ArrayList<>();
 
         this.fileTracker = new FileTracker(repositoryPath);
         this.versionManager = new VersionManager(repositoryPath);
         this.diffGenerator = new DiffGenerator(versionManager, fileTracker);
-        this.mergeHandler = new MergeHandler(versionManager, diffGenerator);
+        this.mergeHandler = new MergeHandler(versionManager);
 
         initializeRepository();
     }
@@ -60,12 +58,11 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
 
     @Override
     public boolean upload(File file) throws VCSException, IOException {
-        boolean success = fileTracker.trackFile(file);
-        if (success) {
-            trackedFiles.add(file.getPath());
-            notifyFileChanged(file.getPath());
+        if (file == null || !file.exists()) {
+            throw new FileOperationException("Invalid file: " + (file != null ? file.getPath() : "null"));
         }
-        return success;
+        trackFile(file.getPath());
+        return true;
     }
 
     @Override
@@ -84,21 +81,22 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
 
     @Override
     public List<File> getUploadedFiles() {
-        return fileTracker.getTrackedFiles();
+        return fileTracker.getTrackedFiles().stream()
+                .map(File::new)
+                .filter(File::exists)
+                .toList();
     }
 
     @Override
     public void removeFile(String filePath) throws VCSException {
         fileTracker.untrackFile(filePath);
-        fileMetadata.remove(filePath);
-        trackedFiles.remove(filePath);
         notifyFileChanged(filePath);
     }
 
     @Override
     public String createVersion(String message) throws VCSException {
         Map<String, String> currentHashes = new HashMap<>();
-        for (String filePath : trackedFiles) {
+        for (String filePath : fileTracker.getTrackedFiles()) {
             String hash = fileTracker.getFileHash(filePath);
             if (hash != null) {
                 currentHashes.put(filePath, hash);
@@ -106,6 +104,11 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
         }
         String versionId = versionManager.createVersion(message, currentHashes);
         versionHistory.add(versionManager.getVersion(versionId));
+
+        for (String filePath : currentHashes.keySet()) {
+            fileTracker.commitFile(filePath, versionId);
+        }
+
         return versionId;
     }
 
@@ -125,7 +128,7 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
             Files.createDirectories(targetFile.getParent());
             Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
 
-            FileMetadata metadata = fileMetadata.get(filePath);
+            FileMetadata metadata = fileTracker.getFileMetadata(filePath);
             if (metadata != null) {
                 metadata.setCurrentHash(hash);
             }
@@ -148,29 +151,25 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
 
     @Override
     public void trackFile(String filePath) throws VCSException, IOException {
-        File file = new File(filePath);
-        if (fileTracker.trackFile(file)) {
-            trackedFiles.add(filePath);
-            notifyFileChanged(filePath);
-        }
+        fileTracker.trackFile(filePath);
+        notifyFileChanged(filePath);
     }
 
     @Override
     public void untrackFile(String filePath) throws VCSException {
         fileTracker.untrackFile(filePath);
-        trackedFiles.remove(filePath);
         notifyFileChanged(filePath);
     }
 
     @Override
     public List<String> getTrackedFiles() {
-        return new ArrayList<>(trackedFiles);
+        return fileTracker.getTrackedFiles();
     }
 
     @Override
     public Map<String, FileStatus> getFileStatuses() {
         Map<String, FileStatus> statuses = new HashMap<>();
-        for (String filePath : trackedFiles) {
+        for (String filePath : fileTracker.getTrackedFiles()) {
             FileMetadata metadata = fileTracker.getFileMetadata(filePath);
             if (metadata != null) {
                 statuses.put(filePath, metadata.getStatus());

@@ -102,10 +102,10 @@ class FileTrackerTest {
         fileTracker.trackFile(file1);
         fileTracker.trackFile(file2);
 
-        List<File> trackedFiles = fileTracker.getTrackedFiles();
+        List<String> trackedFiles = fileTracker.getTrackedFiles();
         assertEquals(2, trackedFiles.size());
-        assertTrue(trackedFiles.contains(file1));
-        assertTrue(trackedFiles.contains(file2));
+        assertTrue(trackedFiles.contains(file1.getPath()));
+        assertTrue(trackedFiles.contains(file2.getPath()));
     }
 
     @Test

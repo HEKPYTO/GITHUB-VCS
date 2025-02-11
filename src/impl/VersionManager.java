@@ -1,12 +1,13 @@
 package impl;
 
+import interfaces.Versionable;
 import model.*;
 import exceptions.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
-public class VersionManager {
+public class VersionManager implements Versionable {
     private final String repositoryPath;
     private final List<VersionInfo> versionHistory;
     private final Map<String, VersionInfo> versionMap;
@@ -51,6 +52,11 @@ public class VersionManager {
         return null;
     }
 
+    @Override
+    public String createVersion(String message) throws VCSException {
+        return createVersion(message, new HashMap<>());
+    }
+
     public String createVersion(String message, Map<String, String> fileHashes) throws VCSException {
         if (message == null) {
             throw new VCSException("Version message cannot be null");
@@ -84,12 +90,34 @@ public class VersionManager {
         }
     }
 
+    @Override
+    public void revertToVersion(String versionId) throws VCSException, IOException {
+        VersionInfo version = getVersion(versionId);
+        if (version == null) {
+            throw new VersionException("Version not found: " + versionId);
+        }
+        Path versionsDir = Paths.get(repositoryPath, ".vcs", "versions");
+        Path versionFile = versionsDir.resolve(versionId);
+        if (!Files.exists(versionFile)) {
+            throw new VersionException("Version file not found: " + versionId);
+        }
+    }
+
     public VersionInfo getVersion(String versionId) {
         return versionMap.get(versionId);
     }
 
+    @Override
     public List<VersionInfo> getVersionHistory() {
         return new ArrayList<>(versionHistory);
+    }
+
+    @Override
+    public VersionInfo getCurrentVersion() {
+        if (versionHistory.isEmpty()) {
+            return null;
+        }
+        return versionHistory.getLast();
     }
 
     public String getRepositoryPath() {

@@ -23,11 +23,9 @@ class MergeHandlerTest {
     Path tempDir;
 
     @BeforeEach
-    void setUp() throws FileOperationException, IOException {
+    void setUp() throws IOException {
         versionManager = new VersionManager(tempDir.toString());
-        FileTracker fileTracker = new FileTracker(tempDir.toString());
-        DiffGenerator diffGenerator = new DiffGenerator(versionManager, fileTracker);
-        mergeHandler = new MergeHandler(versionManager, diffGenerator);
+        mergeHandler = new MergeHandler(versionManager);
         Files.createDirectories(tempDir.resolve(".vcs").resolve("objects"));
     }
 

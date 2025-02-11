@@ -14,7 +14,7 @@ public interface Uploadable {
     void removeFile(String filePath) throws VCSException;
 
     @FunctionalInterface
-    public interface FileFilterable {
+    interface FileFilterable {
         boolean filter(File file);
     }
 
