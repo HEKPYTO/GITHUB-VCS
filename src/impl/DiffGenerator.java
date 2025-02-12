@@ -239,6 +239,7 @@ public class DiffGenerator implements Diffable, Mergeable {
         if (!Files.exists(objectPath)) {
             throw new FileOperationException("Object file not found: " + hash);
         }
+
         try {
             return Files.readAllLines(objectPath);
         } catch (java.nio.charset.MalformedInputException e) {

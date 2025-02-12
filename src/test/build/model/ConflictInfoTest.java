@@ -1,4 +1,4 @@
-package test.model;
+package test.build.model;
 
 import model.ConflictInfo;
 import org.junit.jupiter.api.Test;

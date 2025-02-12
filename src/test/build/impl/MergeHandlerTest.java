@@ -1,4 +1,4 @@
-package test.impl;
+package test.build.impl;
 
 import impl.*;
 import model.*;

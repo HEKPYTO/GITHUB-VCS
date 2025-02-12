@@ -1,4 +1,4 @@
-package test.impl;
+package test.build.impl;
 
 import impl.VersionManager;
 import model.VersionInfo;
@@ -24,7 +24,6 @@ class VersionManagerTest {
 
     @Test
     void testCreateInitialVersion() throws Exception {
-        // Test creating the first version
         Map<String, String> fileHashes = new HashMap<>();
         fileHashes.put("test.txt", "hash123");
 
@@ -39,7 +38,6 @@ class VersionManagerTest {
 
     @Test
     void testCreateEmptyVersion() throws Exception {
-        // Edge case: create version with no files
         String versionId = versionManager.createVersion("Empty commit", new HashMap<>());
         VersionInfo version = versionManager.getVersion(versionId);
         assertTrue(version.getFileHashes().isEmpty());
@@ -56,7 +54,6 @@ class VersionManagerTest {
 
     @Test
     void testVersionHistory() throws Exception {
-        // Test version history tracking
         Map<String, String> fileHashes = new HashMap<>();
         fileHashes.put("test.txt", "hash123");
 
@@ -72,19 +69,16 @@ class VersionManagerTest {
 
     @Test
     void testGetNonexistentVersion() {
-        // Edge case: getting a version that doesn't exist
         assertNull(versionManager.getVersion("nonexistent-version"));
     }
 
     @Test
     void testVersionPersistence() throws Exception {
-        // Test that versions persist after manager recreation
         Map<String, String> fileHashes = new HashMap<>();
         fileHashes.put("test.txt", "hash123");
 
         String versionId = versionManager.createVersion("Test commit", fileHashes);
 
-        // Create new instance
         VersionManager newManager = new VersionManager(tempDir.toString());
         VersionInfo version = newManager.getVersion(versionId);
         assertNotNull(version);

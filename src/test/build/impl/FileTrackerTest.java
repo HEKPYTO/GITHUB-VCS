@@ -1,4 +1,4 @@
-package test.impl;
+package test.build.impl;
 
 import impl.FileTracker;
 import model.FileMetadata;
@@ -83,7 +83,6 @@ class FileTrackerTest {
 
     @Test
     void testUntrackFile() throws Exception {
-        // Test file untracking
         File testFile = createTestFile("test.txt", "content");
         fileTracker.trackFile(testFile);
 

@@ -1,4 +1,4 @@
-package test.model;
+package test.build.model;
 
 import model.ConflictResolution;
 import org.junit.jupiter.api.BeforeEach;

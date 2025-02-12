@@ -1,4 +1,4 @@
-package test.impl;
+package test.build.impl;
 
 import impl.DiffGenerator;
 import impl.FileTracker;
@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class DiffGeneratorTest {
     private DiffGenerator diffGenerator;
     private VersionManager versionManager;
-    private FileTracker fileTracker;
     @TempDir
     Path tempDir;
 
@@ -36,7 +35,7 @@ class DiffGeneratorTest {
         Path objectsDir = tempDir.resolve(".vcs").resolve("objects");
         Files.createDirectories(objectsDir);
         versionManager = new VersionManager(tempDir.toString());
-        fileTracker = new FileTracker(tempDir.toString());
+        FileTracker fileTracker = new FileTracker(tempDir.toString());
         diffGenerator = new DiffGenerator(versionManager, fileTracker);
     }
 
@@ -57,7 +56,7 @@ class DiffGeneratorTest {
         assertNotNull(changes);
         assertEquals(1, changes.getModifications().size());
 
-        LineChange mod = changes.getModifications().get(0);
+        LineChange mod = changes.getModifications().getFirst();
         assertEquals("initial", mod.oldContent());
         assertEquals("modified", mod.newContent());
     }

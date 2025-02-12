@@ -1,4 +1,4 @@
-package test.interfaces;
+package test.build.interfaces;
 
 import interfaces.Versionable;
 import model.VersionInfo;

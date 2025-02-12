@@ -1,4 +1,4 @@
-package test.impl;
+package test.build.impl;
 
 import impl.*;
 import model.*;
@@ -28,7 +28,6 @@ class VersionControlSystemTest {
 
     @Test
     void testInitialization() {
-        // Test system initialization
         assertNotNull(vcs.getFileTracker());
         assertNotNull(vcs.getMergeHandler());
         assertNotNull(vcs.getDiffGenerator());
@@ -39,7 +38,6 @@ class VersionControlSystemTest {
 
     @Test
     void testFileUpload() throws Exception {
-        // Test uploading a single file
         File testFile = createTestFile("test.txt", "content");
         assertTrue(vcs.upload(testFile));
         assertTrue(vcs.getTrackedFiles().contains(testFile.getPath()));
@@ -48,7 +46,6 @@ class VersionControlSystemTest {
 
     @Test
     void testDirectoryUpload() throws Exception {
-        // Test uploading multiple files in a directory
         Path subDir = tempDir.resolve("subdir");
         Files.createDirectory(subDir);
 
@@ -62,7 +59,6 @@ class VersionControlSystemTest {
 
     @Test
     void testFileModificationAndVersioning() throws Exception {
-        // Test file modification tracking and versioning
         File testFile = createTestFile("test.txt", "initial content");
         vcs.upload(testFile);
         String version1 = vcs.createVersion("Initial commit");
@@ -79,7 +75,6 @@ class VersionControlSystemTest {
 
     @Test
     void testRevertToVersion() throws Exception {
-        // Test reverting to a previous version
         File testFile = createTestFile("test.txt", "initial content");
         vcs.upload(testFile);
         String version1 = vcs.createVersion("Initial commit");
@@ -94,14 +89,12 @@ class VersionControlSystemTest {
 
     @Test
     void testRevertToInvalidVersion() {
-        // Test reverting to non-existent version
         assertThrows(VersionException.class,
                 () -> vcs.revertToVersion("nonexistent-version"));
     }
 
     @Test
     void testFileChangeListeners() throws Exception {
-        // Test file change notification system
         List<String> changedFiles = new ArrayList<>();
         vcs.addFileChangeListener(changedFiles::add);
 
@@ -109,12 +102,11 @@ class VersionControlSystemTest {
         vcs.upload(testFile);
 
         assertEquals(1, changedFiles.size());
-        assertEquals(testFile.getPath(), changedFiles.get(0));
+        assertEquals(testFile.getPath(), changedFiles.getFirst());
     }
 
     @Test
     void testRemoveFileChangeListener() throws Exception {
-        // Test removing file change listener
         List<String> changedFiles = new ArrayList<>();
         Consumer<String> listener = changedFiles::add;
         vcs.addFileChangeListener(listener);
@@ -128,7 +120,6 @@ class VersionControlSystemTest {
 
     @Test
     void testUntrackFile() throws Exception {
-        // Test untracking a file
         File testFile = createTestFile("test.txt", "content");
         vcs.upload(testFile);
 
@@ -158,11 +149,9 @@ class VersionControlSystemTest {
 
     @Test
     void testConcurrentModification() throws Exception {
-        // Test handling concurrent modifications
         File testFile = createTestFile("test.txt", "content");
         vcs.upload(testFile);
 
-        // Simulate concurrent modifications
         CompletableFuture<Void> future1 = CompletableFuture.runAsync(() -> {
             try {
                 Files.writeString(testFile.toPath(), "modification 1");
