@@ -2,9 +2,9 @@ name: Java Tests
 
 on:
   push:
-    branches: [ * ]
+    branches: [ "*" ]
   pull_request:
-    branches: [ * ]
+    branches: [ "*" ]
 
 jobs:
   test:
@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
-          submodules: 'recursive'
+          submodules: recursive
           persist-credentials: false
           lfs: true
 
@@ -28,30 +28,22 @@ jobs:
         uses: actions/setup-java@v3
         with:
           java-version: '23'
-          distribution: 'temurin'
+          distribution: temurin
 
       - name: Create lib directory
         run: mkdir -p lib
 
       - name: Download JUnit Dependencies
-        run: |
-          wget https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.9.2/junit-platform-console-standalone-1.9.2.jar -P lib/
+        run: wget https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.9.2/junit-platform-console-standalone-1.9.2.jar -P lib/
 
       - name: Compile
-        run: |
-          javac -cp "lib/*:src" -d out/production/Github $(find src -name "*.java")
+        run: javac -cp "lib/*:src" -d out/production/Github $(find src -name "*.java")
 
       - name: Run Tests
-        run: |
-          java -jar lib/junit-platform-console-standalone-1.9.2.jar \
-            --class-path out/production/Github \
-            --scan-class-path \
-            --include-classname ".*Test" \
-            --reports-dir=test-results
+        run: java -jar lib/junit-platform-console-standalone-1.9.2.jar --class-path out/production/Github --scan-class-path --include-classname ".*Test" --reports-dir=test-results
 
       - name: Run Main
-        run: |
-          java -cp out/production/Github simulation.VCS
+        run: java -cp out/production/Github simulation.VCS
         continue-on-error: false
 
       - name: Upload Test Results
