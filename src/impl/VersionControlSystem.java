@@ -15,7 +15,6 @@ import java.util.function.Consumer;
 
 public class VersionControlSystem implements Uploadable, Versionable, Trackable {
     private final String repositoryPath;
-//    private final Map<String, FileMetadata> fileMetadata;
     private final List<VersionInfo> versionHistory;
     private final List<Consumer<String>> fileChangeListeners;
     private final FileTracker fileTracker;
@@ -25,7 +24,6 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
 
     public VersionControlSystem(String repositoryPath) throws FileOperationException {
         this.repositoryPath = repositoryPath;
-//        this.fileMetadata = new ConcurrentHashMap<>();
         this.versionHistory = new ArrayList<>();
         this.fileChangeListeners = new ArrayList<>();
 
@@ -94,13 +92,37 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
 
     @Override
     public String createVersion(String message) throws VCSException {
+        if (message == null || message.trim().isEmpty()) {
+            throw new VCSException("Invalid version message");
+        }
+
+        List<String> trackedFiles = fileTracker.getTrackedFiles();
+        if (trackedFiles.isEmpty()) {
+            throw new VCSException("No tracked files to create a version");
+        }
+
         Map<String, String> currentHashes = new HashMap<>();
-        for (String filePath : fileTracker.getTrackedFiles()) {
+        for (String filePath : trackedFiles) {
             String hash = fileTracker.getFileHash(filePath);
             if (hash != null) {
                 currentHashes.put(filePath, hash);
             }
         }
+
+        if (!versionHistory.isEmpty()) {
+            VersionInfo lastVersion = getCurrentVersion();
+            Map<String, String> diffHashes = new HashMap<>();
+            for (Map.Entry<String, String> entry : currentHashes.entrySet()) {
+                String filePath = entry.getKey();
+                String currentHash = entry.getValue();
+                String lastHash = lastVersion.getFileHashes().get(filePath);
+                if (lastHash == null || !lastHash.equals(currentHash)) {
+                    diffHashes.put(filePath, currentHash);
+                }
+            }
+            currentHashes = diffHashes;
+        }
+
         String versionId = versionManager.createVersion(message, currentHashes);
         versionHistory.add(versionManager.getVersion(versionId));
 

@@ -31,14 +31,21 @@ public class DiffGenerator implements Diffable, Mergeable {
             throw new VersionException("Invalid version IDs");
         }
 
+        Map<String, String> effectiveOld = oldVer.getFileHashes();
+        Map<String, String> effectiveNew = newVer.getFileHashes();
+
+        if (effectiveNew.isEmpty() && !effectiveOld.isEmpty()) {
+            effectiveNew = effectiveOld;
+        }
+
         Map<String, ChangedLines> fileChanges = new HashMap<>();
         Set<String> allFiles = new HashSet<>();
-        allFiles.addAll(oldVer.getFileHashes().keySet());
-        allFiles.addAll(newVer.getFileHashes().keySet());
+        allFiles.addAll(effectiveOld.keySet());
+        allFiles.addAll(effectiveNew.keySet());
 
         for (String filePath : allFiles) {
-            String oldHash = oldVer.getFileHashes().get(filePath);
-            String newHash = newVer.getFileHashes().get(filePath);
+            String oldHash = effectiveOld.get(filePath);
+            String newHash = effectiveNew.get(filePath);
 
             if (!Objects.equals(oldHash, newHash)) {
                 ChangedLines changes = compareVersions(oldHash, newHash);
@@ -52,6 +59,7 @@ public class DiffGenerator implements Diffable, Mergeable {
 
         return new DiffResult(oldVersion, newVersion, fileChanges);
     }
+
 
     @Override
     public DiffResult getDiff(String filePath) throws VCSException {

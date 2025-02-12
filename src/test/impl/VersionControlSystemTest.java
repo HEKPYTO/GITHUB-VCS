@@ -139,13 +139,22 @@ class VersionControlSystemTest {
 
     @Test
     void testEmptyVersion() throws Exception {
-        // Test creating version with no changes
-        String versionId = vcs.createVersion("Empty commit");
+        File testFile = createTestFile("test.txt", "content");
+        vcs.upload(testFile);
+
+        vcs.trackFile(testFile.getPath());
+
+        String initialVersionId = vcs.createVersion("Initial commit");
+        assertNotNull(initialVersionId);
+
+        String emptyVersionId = vcs.createVersion("Empty commit");
         VersionInfo version = vcs.getCurrentVersion();
+
         assertNotNull(version);
-        assertEquals(versionId, version.getVersionId());
+        assertEquals(emptyVersionId, version.getVersionId());
         assertTrue(version.getFileHashes().isEmpty());
     }
+
 
     @Test
     void testConcurrentModification() throws Exception {
