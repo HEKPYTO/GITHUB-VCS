@@ -1,4 +1,4 @@
-package test;
+package test.impl;
 
 import impl.FileTracker;
 import model.FileMetadata;
@@ -36,14 +36,13 @@ class FileTrackerTest {
 
     @Test
     void testTrackNonexistentFile() {
-        // Edge case: tracking a file that doesn't exist
         File nonExistentFile = new File(tempDir.toString(), "nonexistent.txt");
-        assertThrows(FileOperationException.class, () -> fileTracker.trackFile(nonExistentFile));
+        assertThrows(FileOperationException.FileNotFoundException.class,
+                () -> fileTracker.trackFile(nonExistentFile));
     }
 
     @Test
     void testTrackDirectory() {
-        // Edge case: trying to track a directory instead of a file
         assertThrows(FileOperationException.class,
                 () -> fileTracker.trackFile(tempDir.toFile()));
     }

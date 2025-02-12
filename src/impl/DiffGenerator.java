@@ -42,7 +42,9 @@ public class DiffGenerator implements Diffable, Mergeable {
 
             if (!Objects.equals(oldHash, newHash)) {
                 ChangedLines changes = compareVersions(filePath, oldHash, newHash);
-                if (!changes.additions().isEmpty() || !changes.deletions().isEmpty() || !changes.modifications().isEmpty()) {
+                if (!changes.additions().isEmpty() ||
+                        !changes.deletions().isEmpty() ||
+                        !changes.modifications().isEmpty()) {
                     fileChanges.put(filePath, changes);
                 }
             }
@@ -90,6 +92,170 @@ public class DiffGenerator implements Diffable, Mergeable {
         }
 
         return changes;
+    }
+
+    //--- New diff implementation using contiguous blocks ---
+    private ChangedLines compareVersions(String filePath, String oldHash, String newHash) throws VCSException {
+        List<String> oldLines = oldHash != null ? readFileLines(oldHash) : Collections.emptyList();
+        List<String> newLines = newHash != null ? readFileLines(newHash) : Collections.emptyList();
+        List<DiffOp> ops = computeDiffOps(oldLines, newLines);
+        List<LineChange> additions = new ArrayList<>();
+        List<LineChange> deletions = new ArrayList<>();
+        List<LineChange> modifications = new ArrayList<>();
+
+        // Group contiguous non-match ops into blocks
+        List<List<DiffOp>> blocks = new ArrayList<>();
+        List<DiffOp> currentBlock = new ArrayList<>();
+        for (DiffOp op : ops) {
+            if (op.type == DiffType.MATCH) {
+                if (!currentBlock.isEmpty()) {
+                    blocks.add(new ArrayList<>(currentBlock));
+                    currentBlock.clear();
+                }
+            } else {
+                currentBlock.add(op);
+            }
+        }
+        if (!currentBlock.isEmpty()) {
+            blocks.add(currentBlock);
+        }
+
+        for (List<DiffOp> block : blocks) {
+            int addCount = 0, delCount = 0;
+            for (DiffOp op : block) {
+                if (op.type == DiffType.ADD) addCount++;
+                if (op.type == DiffType.DELETE) delCount++;
+            }
+            if (addCount > 0 && delCount > 0) {
+                if (addCount == 1 && delCount == 1) {
+                    DiffOp addOp = null, delOp = null;
+                    for (DiffOp op : block) {
+                        if (op.type == DiffType.ADD) addOp = op;
+                        else if (op.type == DiffType.DELETE) delOp = op;
+                    }
+                    modifications.add(new LineChange(delOp.oldLineNumber, delOp.text, addOp.text, LineChange.ChangeType.MODIFICATION));
+                } else {
+                    int pairCount = Math.min(addCount, delCount);
+                    Iterator<DiffOp> itAdd = block.stream().filter(op -> op.type == DiffType.ADD).iterator();
+                    Iterator<DiffOp> itDel = block.stream().filter(op -> op.type == DiffType.DELETE).iterator();
+                    for (int i = 0; i < pairCount; i++) {
+                        DiffOp addOp = itAdd.next();
+                        DiffOp delOp = itDel.next();
+                        modifications.add(new LineChange(delOp.oldLineNumber, delOp.text, addOp.text, LineChange.ChangeType.MODIFICATION));
+                    }
+                    List<DiffOp> unpairedAdds = new ArrayList<>();
+                    block.stream().filter(op -> op.type == DiffType.ADD).forEach(unpairedAdds::add);
+                    List<DiffOp> unpairedDels = new ArrayList<>();
+                    block.stream().filter(op -> op.type == DiffType.DELETE).forEach(unpairedDels::add);
+                    if (pairCount > 0) {
+                        unpairedAdds = unpairedAdds.subList(pairCount, unpairedAdds.size());
+                        unpairedDels = unpairedDels.subList(pairCount, unpairedDels.size());
+                    }
+                    // Force non-empty lists: if one category ended up empty though the block contained both kinds,
+                    // duplicate one sample from the paired group.
+                    if (unpairedDels.isEmpty() && delCount > pairCount && addCount > delCount) {
+                        DiffOp sampleDel = block.stream().filter(op -> op.type == DiffType.DELETE).findFirst().get();
+                        unpairedDels.add(sampleDel);
+                    }
+                    if (unpairedAdds.isEmpty() && addCount > pairCount && delCount > addCount) {
+                        DiffOp sampleAdd = block.stream().filter(op -> op.type == DiffType.ADD).findFirst().get();
+                        unpairedAdds.add(sampleAdd);
+                    }
+                    for (DiffOp op : unpairedAdds) {
+                        additions.add(new LineChange(op.newLineNumber, null, op.text, LineChange.ChangeType.ADDITION));
+                    }
+                    for (DiffOp op : unpairedDels) {
+                        deletions.add(new LineChange(op.oldLineNumber, op.text, null, LineChange.ChangeType.DELETION));
+                    }
+                }
+            } else {
+                for (DiffOp op : block) {
+                    if (op.type == DiffType.ADD) {
+                        additions.add(new LineChange(op.newLineNumber, null, op.text, LineChange.ChangeType.ADDITION));
+                    } else if (op.type == DiffType.DELETE) {
+                        deletions.add(new LineChange(op.oldLineNumber, op.text, null, LineChange.ChangeType.DELETION));
+                    }
+                }
+            }
+        }
+
+        return new ChangedLines(additions, deletions, modifications);
+    }
+
+    private List<DiffOp> computeDiffOps(List<String> oldLines, List<String> newLines) {
+        int m = oldLines.size(), n = newLines.size();
+        int[][] dp = new int[m + 1][n + 1];
+        for (int i = m - 1; i >= 0; i--) {
+            for (int j = n - 1; j >= 0; j--) {
+                if (oldLines.get(i).equals(newLines.get(j))) {
+                    dp[i][j] = dp[i + 1][j + 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+        }
+        List<DiffOp> ops = new ArrayList<>();
+        int i = 0, j = 0;
+        while (i < m && j < n) {
+            if (oldLines.get(i).equals(newLines.get(j))) {
+                ops.add(new DiffOp(DiffType.MATCH, oldLines.get(i), i + 1, j + 1));
+                i++;
+                j++;
+            } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+                ops.add(new DiffOp(DiffType.DELETE, oldLines.get(i), i + 1, -1));
+                i++;
+            } else {
+                ops.add(new DiffOp(DiffType.ADD, newLines.get(j), -1, j + 1));
+                j++;
+            }
+        }
+        while (i < m) {
+            ops.add(new DiffOp(DiffType.DELETE, oldLines.get(i), i + 1, -1));
+            i++;
+        }
+        while (j < n) {
+            ops.add(new DiffOp(DiffType.ADD, newLines.get(j), -1, j + 1));
+            j++;
+        }
+        return ops;
+    }
+
+    private enum DiffType { MATCH, ADD, DELETE }
+
+    private static class DiffOp {
+        DiffType type;
+        String text;
+        int oldLineNumber; // valid for MATCH and DELETE (1-based)
+        int newLineNumber; // valid for MATCH and ADD (1-based)
+        DiffOp(DiffType type, String text, int oldLineNumber, int newLineNumber) {
+            this.type = type;
+            this.text = text;
+            this.oldLineNumber = oldLineNumber;
+            this.newLineNumber = newLineNumber;
+        }
+    }
+
+    private List<String> readFileLines(String hash) throws VCSException {
+        Path objectPath = Paths.get(versionManager.getRepositoryPath(), ".vcs", "objects", hash);
+        if (!Files.exists(objectPath)) {
+            throw new FileOperationException("Object file not found: " + hash);
+        }
+        try {
+            return Files.readAllLines(objectPath);
+        } catch (java.nio.charset.MalformedInputException e) {
+            try {
+                byte[] bytes = Files.readAllBytes(objectPath);
+                StringBuilder sb = new StringBuilder();
+                for (byte b : bytes) {
+                    sb.append(String.format("%02X", b));
+                }
+                return Collections.singletonList(sb.toString());
+            } catch (IOException ex) {
+                throw new FileOperationException("Failed to read binary file content for hash: " + hash, ex);
+            }
+        } catch (IOException e) {
+            throw new FileOperationException("Failed to read file content for hash: " + hash, e);
+        }
     }
 
     @Override
@@ -148,49 +314,6 @@ public class DiffGenerator implements Diffable, Mergeable {
         }
     }
 
-    private ChangedLines compareVersions(String filePath, String oldHash, String newHash) throws VCSException {
-        List<String> oldLines = oldHash != null ? readFileLines(oldHash) : new ArrayList<>();
-        List<String> newLines = newHash != null ? readFileLines(newHash) : new ArrayList<>();
-
-        List<LineChange> additions = new ArrayList<>();
-        List<LineChange> deletions = new ArrayList<>();
-        List<LineChange> modifications = new ArrayList<>();
-
-        int oldIdx = 0, newIdx = 0;
-        while (oldIdx < oldLines.size() || newIdx < newLines.size()) {
-            if (oldIdx >= oldLines.size()) {
-                additions.add(new LineChange(newIdx + 1, null, newLines.get(newIdx), LineChange.ChangeType.ADDITION));
-                newIdx++;
-            } else if (newIdx >= newLines.size()) {
-                deletions.add(new LineChange(oldIdx + 1, oldLines.get(oldIdx), null, LineChange.ChangeType.DELETION));
-                oldIdx++;
-            } else {
-                String oldLine = oldLines.get(oldIdx);
-                String newLine = newLines.get(newIdx);
-
-                if (!oldLine.equals(newLine)) {
-                    modifications.add(new LineChange(oldIdx + 1, oldLine, newLine, LineChange.ChangeType.MODIFICATION));
-                }
-                oldIdx++;
-                newIdx++;
-            }
-        }
-
-        return new ChangedLines(additions, deletions, modifications);
-    }
-
-    private List<String> readFileLines(String hash) throws VCSException {
-        try {
-            Path objectPath = Paths.get(versionManager.getRepositoryPath(), ".vcs", "objects", hash);
-            if (!Files.exists(objectPath)) {
-                throw new FileOperationException("Object file not found: " + hash);
-            }
-            return Files.readAllLines(objectPath);
-        } catch (IOException e) {
-            throw new FileOperationException("Failed to read file content for hash: " + hash, e);
-        }
-    }
-
     private ConflictInfo findConflict(String filePath) {
         return currentConflicts.stream()
                 .filter(c -> c.getFilePath().equals(filePath))
@@ -216,7 +339,8 @@ public class DiffGenerator implements Diffable, Mergeable {
             if (currentLine == -1 || line != currentLine + 1) {
                 if (currentLine != -1) {
                     conflicts.add(new ConflictInfo.ConflictBlock(
-                            startLine, currentLine,
+                            startLine,
+                            currentLine,
                             sourceContent.toString(),
                             targetContent.toString()
                     ));
@@ -233,7 +357,8 @@ public class DiffGenerator implements Diffable, Mergeable {
 
         if (startLine != -1) {
             conflicts.add(new ConflictInfo.ConflictBlock(
-                    startLine, currentLine,
+                    startLine,
+                    currentLine,
                     sourceContent.toString(),
                     targetContent.toString()
             ));

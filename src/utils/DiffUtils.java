@@ -8,7 +8,6 @@ public class DiffUtils {
                                             List<LineChange> changes) {
         List<String> result = new ArrayList<>(originalLines);
 
-        // Sort changes by line number in reverse order to apply from bottom to top
         changes.sort((a, b) -> Integer.compare(b.lineNumber(), a.lineNumber()));
 
         for (LineChange change : changes) {

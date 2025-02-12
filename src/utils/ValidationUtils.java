@@ -9,13 +9,13 @@ public class ValidationUtils {
             throw new FileOperationException("File cannot be null");
         }
         if (!file.exists()) {
-            throw new FileOperationException("File does not exist: " + file.getPath());
+            throw new FileOperationException.FileNotFoundException(file.getPath());
         }
         if (!file.isFile()) {
             throw new FileOperationException("Not a regular file: " + file.getPath());
         }
         if (!file.canRead()) {
-            throw new FileOperationException("File is not readable: " + file.getPath());
+            throw new FileOperationException.FileAccessException(file.getPath());
         }
     }
 
@@ -24,13 +24,13 @@ public class ValidationUtils {
             throw new FileOperationException("Directory cannot be null");
         }
         if (!directory.exists()) {
-            throw new FileOperationException("Directory does not exist: " + directory.getPath());
+            throw new FileOperationException.FileNotFoundException(directory.getPath());
         }
         if (!directory.isDirectory()) {
             throw new FileOperationException("Not a directory: " + directory.getPath());
         }
         if (!directory.canRead()) {
-            throw new FileOperationException("Directory is not readable: " + directory.getPath());
+            throw new FileOperationException.FileAccessException(directory.getPath());
         }
     }
 

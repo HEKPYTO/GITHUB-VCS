@@ -57,9 +57,9 @@ public class VersionManager implements Versionable {
         return createVersion(message, new HashMap<>());
     }
 
-    public String createVersion(String message, Map<String, String> fileHashes) throws VCSException {
+    public String createVersion(String message, Map<String, String> fileHashes) throws VersionException {
         if (message == null) {
-            throw new VCSException("Version message cannot be null");
+            throw new VersionException.InvalidVersionException("Version message cannot be null");
         }
 
         try {
@@ -78,7 +78,7 @@ public class VersionManager implements Versionable {
 
             return version.getVersionId();
         } catch (Exception e) {
-            throw new VersionException("Failed to create version", e.toString());
+            throw new VersionException.VersionCreationException(e.getMessage());
         }
     }
 

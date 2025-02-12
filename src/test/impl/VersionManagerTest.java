@@ -1,4 +1,4 @@
-package test;
+package test.impl;
 
 import impl.VersionManager;
 import model.VersionInfo;
@@ -47,11 +47,10 @@ class VersionManagerTest {
 
     @Test
     void testCreateVersionWithNullMessage() {
-        // Edge case: null commit message
         Map<String, String> fileHashes = new HashMap<>();
         fileHashes.put("test.txt", "hash123");
 
-        assertThrows(VCSException.class,
+        assertThrows(VersionException.class,
                 () -> versionManager.createVersion(null, fileHashes));
     }
 

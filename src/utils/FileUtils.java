@@ -12,18 +12,16 @@ public class FileUtils {
         try {
             Files.createDirectories(Paths.get(path));
         } catch (IOException e) {
-            throw new FileOperationException("Failed to create directory: " + path, e);
+            throw new FileOperationException.FileAccessException("Failed to create directory: " + path);
         }
     }
 
     public static void copyFile(File source, File destination) throws FileOperationException {
         try {
-            Files.copy(source.toPath(), destination.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new FileOperationException(
-                    "Failed to copy file from " + source.getPath() +
-                            " to " + destination.getPath(), e);
+            throw new FileOperationException.FileAccessException(
+                    "Failed to copy file from " + source.getPath() + " to " + destination.getPath());
         }
     }
 
@@ -31,7 +29,7 @@ public class FileUtils {
         try {
             return Files.readAllLines(file.toPath());
         } catch (IOException e) {
-            throw new FileOperationException("Failed to read file: " + file.getPath(), e);
+            throw new FileOperationException.FileAccessException("Failed to read file: " + file.getPath());
         }
     }
 
@@ -39,31 +37,31 @@ public class FileUtils {
         try {
             Files.writeString(file.toPath(), content);
         } catch (IOException e) {
-            throw new FileOperationException("Failed to write to file: " + file.getPath(), e);
+            throw new FileOperationException.FileAccessException("Failed to write to file: " + file.getPath());
         }
     }
 
     public static void writeObjectToFile(String path, Object object) throws FileOperationException {
-        try (ObjectOutputStream oos = new ObjectOutputStream(
-                new FileOutputStream(path))) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path))) {
             oos.writeObject(object);
         } catch (IOException e) {
-            throw new FileOperationException("Failed to write object to file: " + path, e);
+            throw new FileOperationException.FileCorruptedException("Failed to write object to file: " + path);
         }
     }
 
     public static <T> T readObjectFromFile(File file, Class<T> type) throws FileOperationException {
-        try (ObjectInputStream ois = new ObjectInputStream(
-                new FileInputStream(file))) {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
             Object obj = ois.readObject();
             if (type.isInstance(obj)) {
                 return type.cast(obj);
             } else {
-                throw new FileOperationException(
+                throw new FileOperationException.FileCorruptedException(
                         "Object in file is not of type " + type.getSimpleName());
             }
-        } catch (IOException | ClassNotFoundException e) {
-            throw new FileOperationException("Failed to read object from file: " + file.getPath(), e);
+        } catch (IOException e) {
+            throw new FileOperationException.FileAccessException("Failed to read file: " + file.getPath());
+        } catch (ClassNotFoundException e) {
+            throw new FileOperationException.FileCorruptedException("Invalid object format in file: " + file.getPath());
         }
     }
 

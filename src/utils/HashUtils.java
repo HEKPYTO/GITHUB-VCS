@@ -15,11 +15,14 @@ public class HashUtils {
             byte[] fileBytes = Files.readAllBytes(file.toPath());
             return calculateHash(fileBytes);
         } catch (IOException e) {
-            throw new FileOperationException("Failed to read file for hashing: " + file.getPath(), e);
+            throw new FileOperationException.FileAccessException("Failed to read file for hashing: " + file.getPath());
         }
     }
 
     public static String calculateStringHash(String content) throws FileOperationException {
+        if (content == null) {
+            throw new FileOperationException("Content cannot be null");
+        }
         return calculateHash(content.getBytes());
     }
 
@@ -29,7 +32,7 @@ public class HashUtils {
             byte[] hash = digest.digest(data);
             return bytesToHex(hash);
         } catch (NoSuchAlgorithmException e) {
-            throw new FileOperationException("Hash algorithm not available: " + HASH_ALGORITHM, e);
+            throw new FileOperationException("Hash algorithm not available: " + HASH_ALGORITHM);
         }
     }
 
@@ -42,6 +45,6 @@ public class HashUtils {
     }
 
     public static boolean compareHashes(String hash1, String hash2) {
-        return hash1 != null && hash2 != null && hash1.equals(hash2);
+        return hash1 != null && hash1.equals(hash2);
     }
 }

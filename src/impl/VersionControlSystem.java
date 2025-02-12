@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public class VersionControlSystem implements Uploadable, Versionable, Trackable {
@@ -146,7 +145,7 @@ public class VersionControlSystem implements Uploadable, Versionable, Trackable 
         if (versionHistory.isEmpty()) {
             return null;
         }
-        return versionHistory.get(versionHistory.size() - 1);
+        return versionHistory.getLast();
     }
 
     @Override

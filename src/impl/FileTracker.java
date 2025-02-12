@@ -31,7 +31,7 @@ public class FileTracker implements Trackable {
 
     public boolean trackFile(File file) throws VCSException, IOException {
         if (!file.exists() || !file.isFile()) {
-            throw new FileOperationException("Invalid file: " + file.getPath());
+            throw new FileOperationException.FileNotFoundException(file.getPath());
         }
 
         String hash = HashUtils.calculateFileHash(file);
@@ -41,7 +41,7 @@ public class FileTracker implements Trackable {
         FileMetadata metadata = new FileMetadata(file.getPath(), hash);
         fileMetadata.put(file.getPath(), metadata);
         trackedFiles.add(file.getPath());
-        notifyFileChanged(file.getPath());
+
         return true;
     }
 
