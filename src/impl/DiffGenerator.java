@@ -41,7 +41,7 @@ public class DiffGenerator implements Diffable, Mergeable {
             String newHash = newVer.getFileHashes().get(filePath);
 
             if (!Objects.equals(oldHash, newHash)) {
-                ChangedLines changes = compareVersions(filePath, oldHash, newHash);
+                ChangedLines changes = compareVersions(oldHash, newHash);
                 if (!changes.additions().isEmpty() ||
                         !changes.deletions().isEmpty() ||
                         !changes.modifications().isEmpty()) {
@@ -70,7 +70,7 @@ public class DiffGenerator implements Diffable, Mergeable {
 
         Map<String, ChangedLines> changes = new HashMap<>();
         if (!currentHash.equals(storedHash)) {
-            changes.put(filePath, compareVersions(filePath, storedHash, currentHash));
+            changes.put(filePath, compareVersions(storedHash, currentHash));
         }
 
         return new DiffResult("current", "working", changes);
@@ -87,15 +87,14 @@ public class DiffGenerator implements Diffable, Mergeable {
             String storedHash = metadata.getCurrentHash();
 
             if (!currentHash.equals(storedHash)) {
-                changes.put(filePath, compareVersions(filePath, storedHash, currentHash));
+                changes.put(filePath, compareVersions(storedHash, currentHash));
             }
         }
 
         return changes;
     }
 
-    //--- New diff implementation using contiguous blocks ---
-    private ChangedLines compareVersions(String filePath, String oldHash, String newHash) throws VCSException {
+    private ChangedLines compareVersions(String oldHash, String newHash) throws VCSException {
         List<String> oldLines = oldHash != null ? readFileLines(oldHash) : Collections.emptyList();
         List<String> newLines = newHash != null ? readFileLines(newHash) : Collections.emptyList();
         List<DiffOp> ops = computeDiffOps(oldLines, newLines);
@@ -103,7 +102,6 @@ public class DiffGenerator implements Diffable, Mergeable {
         List<LineChange> deletions = new ArrayList<>();
         List<LineChange> modifications = new ArrayList<>();
 
-        // Group contiguous non-match ops into blocks
         List<List<DiffOp>> blocks = new ArrayList<>();
         List<DiffOp> currentBlock = new ArrayList<>();
         for (DiffOp op : ops) {
@@ -133,6 +131,9 @@ public class DiffGenerator implements Diffable, Mergeable {
                         if (op.type == DiffType.ADD) addOp = op;
                         else if (op.type == DiffType.DELETE) delOp = op;
                     }
+
+                    assert delOp != null;
+                    assert addOp != null;
                     modifications.add(new LineChange(delOp.oldLineNumber, delOp.text, addOp.text, LineChange.ChangeType.MODIFICATION));
                 } else {
                     int pairCount = Math.min(addCount, delCount);
@@ -147,20 +148,10 @@ public class DiffGenerator implements Diffable, Mergeable {
                     block.stream().filter(op -> op.type == DiffType.ADD).forEach(unpairedAdds::add);
                     List<DiffOp> unpairedDels = new ArrayList<>();
                     block.stream().filter(op -> op.type == DiffType.DELETE).forEach(unpairedDels::add);
-                    if (pairCount > 0) {
-                        unpairedAdds = unpairedAdds.subList(pairCount, unpairedAdds.size());
-                        unpairedDels = unpairedDels.subList(pairCount, unpairedDels.size());
-                    }
-                    // Force non-empty lists: if one category ended up empty though the block contained both kinds,
-                    // duplicate one sample from the paired group.
-                    if (unpairedDels.isEmpty() && delCount > pairCount && addCount > delCount) {
-                        DiffOp sampleDel = block.stream().filter(op -> op.type == DiffType.DELETE).findFirst().get();
-                        unpairedDels.add(sampleDel);
-                    }
-                    if (unpairedAdds.isEmpty() && addCount > pairCount && delCount > addCount) {
-                        DiffOp sampleAdd = block.stream().filter(op -> op.type == DiffType.ADD).findFirst().get();
-                        unpairedAdds.add(sampleAdd);
-                    }
+
+                    unpairedAdds = unpairedAdds.subList(pairCount, unpairedAdds.size());
+                    unpairedDels = unpairedDels.subList(pairCount, unpairedDels.size());
+
                     for (DiffOp op : unpairedAdds) {
                         additions.add(new LineChange(op.newLineNumber, null, op.text, LineChange.ChangeType.ADDITION));
                     }
@@ -225,8 +216,8 @@ public class DiffGenerator implements Diffable, Mergeable {
     private static class DiffOp {
         DiffType type;
         String text;
-        int oldLineNumber; // valid for MATCH and DELETE (1-based)
-        int newLineNumber; // valid for MATCH and ADD (1-based)
+        int oldLineNumber;
+        int newLineNumber;
         DiffOp(DiffType type, String text, int oldLineNumber, int newLineNumber) {
             this.type = type;
             this.text = text;
