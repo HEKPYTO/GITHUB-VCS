@@ -36,7 +36,6 @@ public class ConflictInfo {
         RESOLVED_CUSTOM
     }
 
-    // Getters
     public String getFilePath() { return filePath; }
     public String getSourceVersion() { return sourceVersion; }
     public String getTargetVersion() { return targetVersion; }

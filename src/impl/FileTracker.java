@@ -52,7 +52,7 @@ public class FileTracker implements Trackable {
     }
 
     @Override
-    public void untrackFile(String filePath) throws VCSException {
+    public void untrackFile(String filePath) {
         fileMetadata.remove(filePath);
         trackedFiles.remove(filePath);
         notifyFileChanged(filePath);
