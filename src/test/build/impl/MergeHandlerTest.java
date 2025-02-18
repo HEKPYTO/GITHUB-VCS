@@ -42,7 +42,7 @@ class MergeHandlerTest {
     void testMergeWithoutConflicts() throws Exception {
         String filePath = tempDir.resolve("test.txt").toString();
         String baseVersion = createVersion("Base", Map.of(filePath,
-                storeFile("test.txt", "base content\ncommon line")));
+                storeFile("test.txt", "modified contents\ncommon line")));
         String sourceVersion = createVersion("Source", Map.of(filePath,
                 storeFile("test.txt", "modified content\ncommon line")));
 

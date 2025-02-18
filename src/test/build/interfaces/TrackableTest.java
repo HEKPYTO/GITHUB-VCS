@@ -105,7 +105,7 @@ class TrackableTest {
 
             trackable.untrackFile(testFile.toString());
             assertEquals(1, notifications.size());
-            assertEquals(testFile.toString(), notifications.get(0));
+            assertEquals(testFile.toString(), notifications.getFirst());
         }
 
         @Test

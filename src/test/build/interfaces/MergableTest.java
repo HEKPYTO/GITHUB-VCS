@@ -36,7 +36,7 @@ class MergableTest {
             assertFalse(conflicts.isEmpty());
             assertEquals(1, conflicts.size());  // Updated to match implementation
 
-            ConflictInfo conflict = conflicts.get(0);
+            ConflictInfo conflict = conflicts.getFirst();
             assertEquals("test.txt", conflict.getFilePath());
             assertEquals(ConflictInfo.ConflictStatus.UNRESOLVED, conflict.getStatus());
 

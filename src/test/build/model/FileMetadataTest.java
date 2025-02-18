@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -23,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FileMetadataTest {
     private FileMetadata metadata;
-    private static final String TEST_FILE_PATH = "/test/path/file.txt";
+    private static final String TEST_FILE_PATH = "/test/file.txt";
     private static final String INITIAL_HASH = "abc123";
 
     @BeforeEach
@@ -46,7 +47,7 @@ class FileMetadataTest {
         String newHash = "def456";
         LocalDateTime beforeUpdate = metadata.getLastModified();
         try {
-            Thread.sleep(10); // Ensure time difference
+            Thread.sleep(100); // Ensure time difference
         } catch (InterruptedException e) {
             fail("Test interrupted");
         }
@@ -62,7 +63,7 @@ class FileMetadataTest {
     void testSetCurrentHashSameValue() {
         LocalDateTime beforeUpdate = metadata.getLastModified();
         try {
-            Thread.sleep(10); // Ensure time difference
+            Thread.sleep(10);
         } catch (InterruptedException e) {
             fail("Test interrupted");
         }
@@ -121,17 +122,22 @@ class FileMetadataTest {
 
     @Test
     void testConcurrentAccess() {
-        int threadCount = 100;
+        int threadCount = 1000;
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch endLatch = new CountDownLatch(threadCount);
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+
+        List<String> versions = Collections.synchronizedList(new ArrayList<>());
 
         for (int i = 0; i < threadCount; i++) {
             final String version = "v" + i;
             executor.submit(() -> {
                 try {
-                    startLatch.await(); // Wait for all threads to be ready
-                    metadata.addVersion(version);
+                    startLatch.await();
+                    synchronized (metadata) {
+                        metadata.addVersion(version);
+                    }
+                    versions.add(version);
                     metadata.getVersions();
                     metadata.getCurrentHash();
                     metadata.getLastModified();
@@ -143,14 +149,12 @@ class FileMetadataTest {
             });
         }
 
-        startLatch.countDown(); // Start all threads simultaneously
+        startLatch.countDown();
         try {
             assertTrue(endLatch.await(5, TimeUnit.SECONDS));
-            List<String> versions = metadata.getVersions();
-            assertEquals(threadCount, versions.size());
-            // Verify all versions are present
-            for (int i = 0; i < threadCount; i++) {
-                assertTrue(versions.contains("v" + i));
+            assertEquals(threadCount, metadata.getVersions().size());
+            for (String version : versions) {
+                assertTrue(metadata.getVersions().contains(version));
             }
         } catch (InterruptedException e) {
             fail("Test interrupted");

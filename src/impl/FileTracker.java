@@ -41,6 +41,7 @@ public class FileTracker implements Trackable {
         FileMetadata metadata = new FileMetadata(file.getPath(), hash);
         fileMetadata.put(file.getPath(), metadata);
         trackedFiles.add(file.getPath());
+        notifyFileChanged(file.getPath());
 
         return true;
     }
