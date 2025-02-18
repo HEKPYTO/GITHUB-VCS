@@ -51,21 +51,6 @@ class TrackableTest {
         }
 
         @Test
-        void shouldTrackMultipleFiles() throws Exception {
-            List<String> files = new ArrayList<>();
-            for (int i = 0; i < 3; i++) {
-                Path file = createTestFile("file" + i + ".txt", "content" + i);
-                files.add(file.toString());
-            }
-
-            trackable.trackFiles(files);
-
-            List<String> trackedFiles = trackable.getTrackedFiles();
-            assertEquals(3, trackedFiles.size());
-            assertTrue(trackedFiles.containsAll(files));
-        }
-
-        @Test
         void shouldNotifyListenersOnTrack() throws Exception {
             List<String> notifications = new ArrayList<>();
             Consumer<String> listener = notifications::add;

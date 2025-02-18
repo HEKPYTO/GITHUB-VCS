@@ -16,10 +16,4 @@ public interface Trackable {
 
     void addFileChangeListener(Consumer<String> listener);
     void removeFileChangeListener(Consumer<String> listener);
-
-    default void trackFiles(List<String> filePaths) throws VCSException, IOException {
-        for (String path : filePaths) {
-            trackFile(path);
-        }
-    }
 }
