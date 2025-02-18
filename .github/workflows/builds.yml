@@ -28,14 +28,14 @@ jobs:
             --exclude 'test/solution/' \
             src/ student/
           if [ -d "students" ]; then
-            if [ -f "students/.studentsignore" ]; then
+            if [ -f "students/.studentignore" ]; then
               while IFS= read -r filename || [ -n "$filename" ]; do
                 if [ ! -z "$filename" ]; then
                   find student -type f -name "$filename" -print0 | while IFS= read -r -d '' file_to_remove; do
                     rm -f "$file_to_remove"
                   done
                 fi
-              done < "students/.studentsignore"
+              done < "students/.studentignore"
             fi
 
             find student -type f -print0 | while IFS= read -r -d '' file; do
