@@ -27,31 +27,39 @@ jobs:
             --exclude 'test/built/' \
             --exclude 'test/solution/' \
             src/ student/
+
           if [ -d "students" ]; then
-            if [ -f "students/.studentignore" ]; then
+            if [ -f "students/.studentsignore" ]; then
+              echo "Processing .studentsignore file..."
               while IFS= read -r filename || [ -n "$filename" ]; do
                 if [ ! -z "$filename" ]; then
+                  echo "Looking for files to remove: $filename"
                   find student -type f -name "$filename" -print0 | while IFS= read -r -d '' file_to_remove; do
+                    echo "Removing file: $file_to_remove"
                     rm -f "$file_to_remove"
                   done
                 fi
-              done < "students/.studentignore"
+              done < "students/.studentsignore"
             fi
 
             find student -type f -print0 | while IFS= read -r -d '' file; do
               filename=$(basename "$file")
               find "students" -type f -name "$filename" -print0 | while IFS= read -r -d '' student_file; do
                 find student -type f -name "$filename" -print0 | while IFS= read -r -d '' target_file; do
+                  echo "Replacing $target_file with $student_file"
                   cp -f "$student_file" "$target_file"
                 done
               done
             done
           fi
+
           cd student && zip -r ../student.zip . && cd ..
+
           rsync -av --delete \
             --exclude 'test/built/' \
             --exclude 'test/validation/' \
             src/ solution/
+
           cd solution && zip -r ../solution.zip . && cd ..
 
       - name: Create GitHub Release
