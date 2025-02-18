@@ -1,4 +1,4 @@
-package test.build.model;
+package test.built.model;
 
 import model.DiffResult;
 import model.ChangedLines;

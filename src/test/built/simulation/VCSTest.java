@@ -1,4 +1,4 @@
-package test.build.simulation;
+package test.built.simulation;
 
 import impl.VersionControlSystem;
 import model.*;

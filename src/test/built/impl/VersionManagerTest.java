@@ -1,4 +1,4 @@
-package test.build.impl;
+package test.built.impl;
 
 import impl.VersionManager;
 import model.VersionInfo;

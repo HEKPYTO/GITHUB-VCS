@@ -1,4 +1,4 @@
-package test.build.model;
+package test.built.model;
 
 import model.FileStatus;
 import org.junit.jupiter.api.Test;

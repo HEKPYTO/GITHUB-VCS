@@ -1,4 +1,4 @@
-package test.build.interfaces;
+package test.built.interfaces;
 
 import interfaces.Uploadable;
 import exceptions.VCSException;
