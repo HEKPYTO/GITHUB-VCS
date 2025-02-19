@@ -30,10 +30,13 @@ jobs:
             if [ -f "students/.studentsignore" ]; then
               while IFS= read -r pattern || [ -n "$pattern" ]; do
                 if [ ! -z "$pattern" ]; then
+                  echo "Processing pattern: $pattern"
                   find student -type f -name "$pattern" -print0 | while IFS= read -r -d '' file_to_remove; do
+                    echo "Removing file: $file_to_remove"
                     rm -f "$file_to_remove"
                   done
                   find student -type d -name "$pattern" -print0 | while IFS= read -r -d '' dir_to_remove; do
+                    echo "Removing directory: $dir_to_remove"
                     rm -rf "$dir_to_remove"
                   done
                 fi
@@ -43,6 +46,7 @@ jobs:
               filename=$(basename "$file")
               find "students" -type f -name "$filename" -print0 | while IFS= read -r -d '' student_file; do
                 find student -type f -name "$filename" -print0 | while IFS= read -r -d '' target_file; do
+                  echo "Replacing file: $target_file with content from: $student_file"
                   cp -f "$student_file" "$target_file"
                 done
               done
