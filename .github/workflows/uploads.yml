@@ -1,5 +1,4 @@
 name: Upload to Google Drive
-
 on:
   workflow_dispatch:
 
@@ -45,7 +44,38 @@ jobs:
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          # Authenticate with Google Drive
+          def create_folder(service, folder_name, parent_folder_id, folder_cache):
+              """Create a folder in Google Drive, ensuring it does not already exist."""
+              if (parent_folder_id, folder_name) in folder_cache:
+                  return folder_cache[(parent_folder_id, folder_name)]
+
+              query = f"name='{folder_name}' and '{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+              results = service.files().list(q=query, fields="files(id)").execute()
+              folders = results.get("files", [])
+
+              if folders:
+                  folder_id = folders[0]["id"]
+              else:
+                  folder_metadata = {
+                      "name": folder_name,
+                      "mimeType": "application/vnd.google-apps.folder",
+                      "parents": [parent_folder_id]
+                  }
+                  folder = service.files().create(body=folder_metadata, fields="id").execute()
+                  folder_id = folder["id"]
+
+              folder_cache[(parent_folder_id, folder_name)] = folder_id
+              return folder_id
+
+          def upload_file(service, file_path, drive_folder_id):
+              """Upload a file to Google Drive inside the specified folder."""
+              media = MediaFileUpload(file_path, resumable=True)
+              service.files().create(
+                  body={"name": os.path.basename(file_path), "parents": [drive_folder_id]},
+                  media_body=media,
+                  fields="id"
+              ).execute()
+
           creds = Credentials(
               None,
               refresh_token=os.environ['REFRESH_TOKEN'],
@@ -53,78 +83,40 @@ jobs:
               client_id=os.environ['CLIENT_ID'],
               client_secret=os.environ['CLIENT_SECRET']
           )
+
           service = build('drive', 'v3', credentials=creds)
+          folder_cache = {}
 
-          # Create main folder in Google Drive
-          folder_name = f'VCS_V1.{os.environ["VERSION"]}'
-          print(f"Creating folder: {folder_name}")
-          folder = service.files().create(
-              body={'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder',
-                    'parents': [os.environ['DRIVE_FOLDER_ID']]},
-              fields='id'
-          ).execute()
+          root_folder_name = f'VCS_V1.{os.environ["VERSION"]}'
+          root_folder_id = create_folder(service, root_folder_name, os.environ['DRIVE_FOLDER_ID'], folder_cache)
 
-          # Process each zip file
           for zip_file in ['student.zip', 'solution.zip']:
-              if not os.path.exists(zip_file):
-                  print(f"Skipping {zip_file}, not found.")
-                  continue
-
               subfolder_name = zip_file.replace('.zip', '')
-              print(f"Creating subfolder: {subfolder_name}")
-              subfolder = service.files().create(
-                  body={'name': subfolder_name, 'mimeType': 'application/vnd.google-apps.folder',
-                        'parents': [folder['id']]},
-                  fields='id'
-              ).execute()
+              subfolder_id = create_folder(service, subfolder_name, root_folder_id, folder_cache)
 
-              # Extract zip file to subfolder
-              print(f"Extracting {zip_file}")
-              os.makedirs(subfolder_name, exist_ok=True)
+              print(f"Extracting {zip_file}...")
               with zipfile.ZipFile(zip_file, 'r') as zip_ref:
                   zip_ref.extractall(subfolder_name)
 
-              # Function to upload directory structure recursively
-              def upload_directory(local_path, parent_id):
-                  for root, dirs, files in os.walk(local_path):
-                      for dir_name in dirs:
-                          dir_path = os.path.join(root, dir_name)
-                          relative_path = os.path.relpath(dir_path, local_path)
-                          print(f"Creating subfolder: {relative_path}")
+              print(f"Uploading extracted files from {subfolder_name}...")
+              for root, dirs, files in os.walk(subfolder_name):
+                  relative_path = os.path.relpath(root, subfolder_name)
+                  parent_id = subfolder_id
 
-                          # Create folder in Drive
-                          drive_folder = service.files().create(
-                              body={'name': relative_path, 'mimeType': 'application/vnd.google-apps.folder',
-                                    'parents': [parent_id]},
-                              fields='id'
-                          ).execute()
-                          upload_directory(dir_path, drive_folder['id'])  # Recurse into subfolder
+                  if relative_path != ".":
+                      # Create nested folders dynamically
+                      folders = relative_path.split(os.sep)
+                      for folder in folders:
+                          parent_id = create_folder(service, folder, parent_id, folder_cache)
 
-                      for file in files:
-                          file_path = os.path.join(root, file)
-                          relative_path = os.path.relpath(file_path, local_path)
-                          print(f"Uploading file: {relative_path}")
+                  for file in files:
+                      file_path = os.path.join(root, file)
+                      upload_file(service, file_path, parent_id)
 
-                          media = MediaFileUpload(file_path, resumable=True)
-                          service.files().create(
-                              body={'name': relative_path, 'parents': [parent_id]},
-                              media_body=media,
-                              fields='id'
-                          ).execute()
+              print(f"Uploading {zip_file} to main folder...")
+              upload_file(service, zip_file, root_folder_id)
 
-              # Upload extracted contents while preserving structure
-              upload_directory(subfolder_name, subfolder['id'])
-
-              # Upload original zip file to main folder
-              print(f"Uploading {zip_file} to main folder")
-              media = MediaFileUpload(zip_file, resumable=True)
-              service.files().create(
-                  body={'name': zip_file, 'parents': [folder['id']]},
-                  media_body=media,
-                  fields='id'
-              ).execute()
-
-          print("Upload completed successfully.")
+          print("Upload completed successfully")
           EOF
 
           python upload.py
