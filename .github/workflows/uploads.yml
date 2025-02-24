@@ -1,31 +1,44 @@
 name: Upload to Google Drive
-
 on:
   workflow_dispatch:
 
 jobs:
   upload-to-drive:
     runs-on: ubuntu-latest
-
     steps:
       - name: Get Latest Release
         id: latest_release
         run: |
           LATEST_VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name | sed 's/v//')
-          echo "version=$LATEST_VERSION" >> $GITHUB_ENV
+          echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest version: $LATEST_VERSION"
 
       - name: Download Release Assets
         run: |
-          curl -L -o student.zip https://github.com/${{ github.repository }}/releases/download/v${{ env.version }}/student.zip
-          curl -L -o solution.zip https://github.com/${{ github.repository }}/releases/download/v${{ env.version }}/solution.zip
+          # Download with error checking
+          for file in student.zip solution.zip; do
+            echo "Downloading $file..."
+            if curl -L -o "$file" "https://github.com/${{ github.repository }}/releases/download/v${{ steps.latest_release.outputs.version }}/$file"; then
+              echo "$file downloaded successfully"
+              if unzip -t "$file" > /dev/null; then
+                echo "$file verified as valid zip"
+              else
+                echo "Error: $file is not a valid zip file"
+                exit 1
+              fi
+            else
+              echo "Error downloading $file"
+              exit 1
+            fi
+          done
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
       - name: Install Dependencies
-        run: pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+        run: pip install google-auth google-api-python-client
 
       - name: Upload to Drive
         env:
@@ -33,7 +46,7 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          VERSION: ${{ env.version }}
+          VERSION: ${{ steps.latest_release.outputs.version }}
         run: |
           cat > upload.py << 'EOF'
           import os
@@ -42,61 +55,80 @@ jobs:
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          def create_folder(service, name, parent_id):
-              """Create a folder in Google Drive."""
+          # Verify files exist and are valid
+          for zip_file in ['student.zip', 'solution.zip']:
+              if not os.path.exists(zip_file):
+                  raise FileNotFoundError(f"{zip_file} not found")
               try:
-                  folder_metadata = {
-                      'name': name,
-                      'mimeType': 'application/vnd.google-apps.folder',
-                      'parents': [parent_id]
-                  }
-                  folder = service.files().create(body=folder_metadata, fields='id').execute()
-                  return folder.get('id')
-              except Exception as e:
-                  print(f"Error creating folder {name}: {e}")
-                  return None
-
-          def upload_file(service, file_path, folder_id):
-              """Upload a file to a specified folder in Google Drive."""
-              try:
-                  file_metadata = {'name': os.path.basename(file_path), 'parents': [folder_id]}
-                  media = MediaFileUpload(file_path, resumable=True)
-                  service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-                  print(f"Uploaded: {file_path}")
-              except Exception as e:
-                  print(f"Error uploading {file_path}: {e}")
+                  with zipfile.ZipFile(zip_file, 'r') as zf:
+                      zf.testzip()
+              except zipfile.BadZipFile:
+                  raise Exception(f"{zip_file} is not a valid zip file")
 
           creds = Credentials(
               None,
-              refresh_token=os.getenv('REFRESH_TOKEN'),
+              refresh_token=os.environ['REFRESH_TOKEN'],
               token_uri="https://oauth2.googleapis.com/token",
-              client_id=os.getenv('CLIENT_ID'),
-              client_secret=os.getenv('CLIENT_SECRET')
+              client_id=os.environ['CLIENT_ID'],
+              client_secret=os.environ['CLIENT_SECRET']
           )
 
           service = build('drive', 'v3', credentials=creds)
-          root_folder_name = f'VCS_V1.{os.getenv("VERSION")}'
-          root_folder_id = create_folder(service, root_folder_name, os.getenv('DRIVE_FOLDER_ID'))
+          folder_name = f'VCS_V1.{os.environ["VERSION"]}'
 
-          if root_folder_id:
-              for zip_file in ['student.zip', 'solution.zip']:
-                  subfolder_name = zip_file.replace('.zip', '')
-                  subfolder_id = create_folder(service, subfolder_name, root_folder_id)
+          folder = service.files().create(
+              body={
+                  'name': folder_name,
+                  'mimeType': 'application/vnd.google-apps.folder',
+                  'parents': [os.environ['DRIVE_FOLDER_ID']]
+              },
+              fields='id'
+          ).execute()
 
-                  if subfolder_id:
-                      with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-                          zip_ref.extractall(subfolder_name)
+          for zip_file in ['student.zip', 'solution.zip']:
+              subfolder_name = zip_file.replace('.zip', '')
+              subfolder = service.files().create(
+                  body={
+                      'name': subfolder_name,
+                      'mimeType': 'application/vnd.google-apps.folder',
+                      'parents': [folder['id']]
+                  },
+                  fields='id'
+              ).execute()
 
-                      for root, _, files in os.walk(subfolder_name):
-                          for file in files:
-                              upload_file(service, os.path.join(root, file), subfolder_id)
+              with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+                  zip_ref.extractall(subfolder_name)
 
-                      upload_file(service, zip_file, root_folder_id)
-          EOF
+              for root, dirs, files in os.walk(subfolder_name):
+                  for file in files:
+                      file_path = os.path.join(root, file)
+                      relative_path = os.path.relpath(file_path, subfolder_name)
           
+                      media = MediaFileUpload(file_path, resumable=True)
+                      service.files().create(
+                          body={
+                              'name': relative_path,
+                              'parents': [subfolder['id']]
+                          },
+                          media_body=media,
+                          fields='id'
+                      ).execute()
+
+              media = MediaFileUpload(zip_file, resumable=True)
+              service.files().create(
+                  body={
+                      'name': zip_file,
+                      'parents': [folder['id']]
+                  },
+                  media_body=media,
+                  fields='id'
+              ).execute()
+          EOF
+
           python upload.py
 
       - name: Cleanup
+        if: always()
         run: |
           rm -f student.zip solution.zip
           rm -rf student solution

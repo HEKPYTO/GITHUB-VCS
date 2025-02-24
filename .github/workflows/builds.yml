@@ -1,74 +1,74 @@
-name: Create Release
-
-on:
-  workflow_run:
-    workflows: ["Java Tests"]
-    types: [completed]
-    branches: [main]
-
-permissions:
-  contents: write
-
-jobs:
-  create-release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Prepare Build Directories
-        run: |
-          mkdir -p student solution
-          rsync -av --delete \
-            --exclude 'test/built/' \
-            --exclude 'test/solution/' \
-            src/ student/
-          if [ -d "students" ]; then
-            if [ -f "students/.studentsignore" ]; then
-              while IFS= read -r pattern || [ -n "$pattern" ]; do
-                if [ ! -z "$pattern" ]; then
-                  echo "Processing pattern: $pattern"
-                  find student -type f -name "$pattern" -print0 | while IFS= read -r -d '' file_to_remove; do
-                    echo "Removing file: $file_to_remove"
-                    rm -f "$file_to_remove"
-                  done
-                  find student -type d -name "$pattern" -print0 | while IFS= read -r -d '' dir_to_remove; do
-                    echo "Removing directory: $dir_to_remove"
-                    rm -rf "$dir_to_remove"
-                  done
-                fi
-              done < "students/.studentsignore"
-            fi
-            find student -type f -print0 | while IFS= read -r -d '' file; do
-              filename=$(basename "$file")
-              find "students" -type f -name "$filename" -print0 | while IFS= read -r -d '' student_file; do
-                find student -type f -name "$filename" -print0 | while IFS= read -r -d '' target_file; do
-                  echo "Replacing file: $target_file with content from: $student_file"
-                  cp -f "$student_file" "$target_file"
-                done
-              done
-            done
-          fi
-          cd student && zip -r ../student.zip . && cd ..
-          rsync -av --delete \
-            --exclude 'test/built/' \
-            --exclude 'test/validation/' \
-            src/ solution/
-          cd solution && zip -r ../solution.zip . && cd ..
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            student.zip
-            solution.zip
-          tag_name: v${{ github.run_number }}
-          name: Build V${{ github.run_number }}
-          body: This release contains student and solution packages.
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cleanup
-        run: rm -rf student.zip solution.zip
+#name: Create Release
+#
+#on:
+#  workflow_run:
+#    workflows: ["Java Tests"]
+#    types: [completed]
+#    branches: [main]
+#
+#permissions:
+#  contents: write
+#
+#jobs:
+#  create-release:
+#    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+#    runs-on: ubuntu-24.04
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#          fetch-depth: 0
+#
+#      - name: Prepare Build Directories
+#        run: |
+#          mkdir -p student solution
+#          rsync -av --delete \
+#            --exclude 'test/built/' \
+#            --exclude 'test/solution/' \
+#            src/ student/
+#          if [ -d "students" ]; then
+#            if [ -f "students/.studentsignore" ]; then
+#              while IFS= read -r pattern || [ -n "$pattern" ]; do
+#                if [ ! -z "$pattern" ]; then
+#                  echo "Processing pattern: $pattern"
+#                  find student -type f -name "$pattern" -print0 | while IFS= read -r -d '' file_to_remove; do
+#                    echo "Removing file: $file_to_remove"
+#                    rm -f "$file_to_remove"
+#                  done
+#                  find student -type d -name "$pattern" -print0 | while IFS= read -r -d '' dir_to_remove; do
+#                    echo "Removing directory: $dir_to_remove"
+#                    rm -rf "$dir_to_remove"
+#                  done
+#                fi
+#              done < "students/.studentsignore"
+#            fi
+#            find student -type f -print0 | while IFS= read -r -d '' file; do
+#              filename=$(basename "$file")
+#              find "students" -type f -name "$filename" -print0 | while IFS= read -r -d '' student_file; do
+#                find student -type f -name "$filename" -print0 | while IFS= read -r -d '' target_file; do
+#                  echo "Replacing file: $target_file with content from: $student_file"
+#                  cp -f "$student_file" "$target_file"
+#                done
+#              done
+#            done
+#          fi
+#          cd student && zip -r ../student.zip . && cd ..
+#          rsync -av --delete \
+#            --exclude 'test/built/' \
+#            --exclude 'test/validation/' \
+#            src/ solution/
+#          cd solution && zip -r ../solution.zip . && cd ..
+#
+#      - name: Create GitHub Release
+#        uses: softprops/action-gh-release@v1
+#        with:
+#          files: |
+#            student.zip
+#            solution.zip
+#          tag_name: v${{ github.run_number }}
+#          name: Build V${{ github.run_number }}
+#          body: This release contains student and solution packages.
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#
+#      - name: Cleanup
+#        run: rm -rf student.zip solution.zip
