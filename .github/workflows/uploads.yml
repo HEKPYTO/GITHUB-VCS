@@ -1,10 +1,12 @@
 name: Upload to Google Drive
+
 on:
   workflow_dispatch:
 
 jobs:
   upload-to-drive:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +42,7 @@ jobs:
           cat > upload.py << 'EOF'
           import os
           import zipfile
+          from datetime import datetime
           from google.oauth2.credentials import Credentials
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
@@ -87,7 +90,9 @@ jobs:
           service = build('drive', 'v3', credentials=creds)
           folder_cache = {}
 
-          root_folder_name = f'VCS_V1.{os.environ["VERSION"]}'
+          # Generate timestamped root folder name
+          timestamp = datetime.now().strftime("%d%m%Y_%H%M%S")
+          root_folder_name = f'VCS_V1.{os.environ["VERSION"]}_{timestamp}'
           root_folder_id = create_folder(service, root_folder_name, os.environ['DRIVE_FOLDER_ID'], folder_cache)
 
           for zip_file in ['student.zip', 'solution.zip']:
