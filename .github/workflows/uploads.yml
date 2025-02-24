@@ -22,6 +22,14 @@ jobs:
           latest: true
           fileName: "*.zip"
 
+      - name: Get Version
+        id: version
+        run: |
+          VERSION=$(curl -sH "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/latest | \
+            jq -r .tag_name | sed 's/v//')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Upload to Drive
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
@@ -29,7 +37,6 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: |
-          VERSION=$(ls student.zip | sed 's/.*v\([0-9]*\).*/\1/')
           cat > upload.py << 'EOF'
           import os
           import zipfile
@@ -48,6 +55,7 @@ jobs:
           service = build('drive', 'v3', credentials=creds)
           folder_name = f'VCS_V1.{os.environ["VERSION"]}'
           
+          print(f"Creating folder: {folder_name}")
           folder = service.files().create(
               body={
                   'name': folder_name,
@@ -58,7 +66,10 @@ jobs:
           ).execute()
           
           for zip_file in ['student.zip', 'solution.zip']:
+              print(f"Processing {zip_file}")
               subfolder_name = zip_file.replace('.zip', '')
+          
+              print(f"Creating subfolder: {subfolder_name}")
               subfolder = service.files().create(
                   body={
                       'name': subfolder_name,
@@ -68,13 +79,16 @@ jobs:
                   fields='id'
               ).execute()
           
+              print(f"Extracting {zip_file}")
               with zipfile.ZipFile(zip_file, 'r') as zip_ref:
                   zip_ref.extractall(subfolder_name)
           
+              print(f"Uploading extracted files from {subfolder_name}")
               for root, dirs, files in os.walk(subfolder_name):
                   for file in files:
                       file_path = os.path.join(root, file)
                       relative_path = os.path.relpath(file_path, subfolder_name)
+                      print(f"Uploading file: {relative_path}")
           
                       media = MediaFileUpload(file_path, resumable=True)
                       service.files().create(
@@ -86,6 +100,7 @@ jobs:
                           fields='id'
                       ).execute()
           
+              print(f"Uploading {zip_file} to main folder")
               media = MediaFileUpload(zip_file, resumable=True)
               service.files().create(
                   body={
@@ -95,6 +110,8 @@ jobs:
                   media_body=media,
                   fields='id'
               ).execute()
+          
+          print("Upload completed successfully")
           EOF
           
           python upload.py
