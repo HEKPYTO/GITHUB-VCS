@@ -1,0 +1,102 @@
+name: Upload to Google Drive
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload-to-drive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Latest Release
+        id: latest_release
+        run: |
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name | sed 's/v//')
+          echo "version=$LATEST_VERSION" >> $GITHUB_ENV
+
+      - name: Download Release Assets
+        run: |
+          curl -L -o student.zip https://github.com/${{ github.repository }}/releases/download/v${{ env.version }}/student.zip
+          curl -L -o solution.zip https://github.com/${{ github.repository }}/releases/download/v${{ env.version }}/solution.zip
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+
+      - name: Upload to Drive
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          VERSION: ${{ env.version }}
+        run: |
+          cat > upload.py << 'EOF'
+          import os
+          import zipfile
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          def create_folder(service, name, parent_id):
+              """Create a folder in Google Drive."""
+              try:
+                  folder_metadata = {
+                      'name': name,
+                      'mimeType': 'application/vnd.google-apps.folder',
+                      'parents': [parent_id]
+                  }
+                  folder = service.files().create(body=folder_metadata, fields='id').execute()
+                  return folder.get('id')
+              except Exception as e:
+                  print(f"Error creating folder {name}: {e}")
+                  return None
+
+          def upload_file(service, file_path, folder_id):
+              """Upload a file to a specified folder in Google Drive."""
+              try:
+                  file_metadata = {'name': os.path.basename(file_path), 'parents': [folder_id]}
+                  media = MediaFileUpload(file_path, resumable=True)
+                  service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+                  print(f"Uploaded: {file_path}")
+              except Exception as e:
+                  print(f"Error uploading {file_path}: {e}")
+
+          creds = Credentials(
+              None,
+              refresh_token=os.getenv('REFRESH_TOKEN'),
+              token_uri="https://oauth2.googleapis.com/token",
+              client_id=os.getenv('CLIENT_ID'),
+              client_secret=os.getenv('CLIENT_SECRET')
+          )
+
+          service = build('drive', 'v3', credentials=creds)
+          root_folder_name = f'VCS_V1.{os.getenv("VERSION")}'
+          root_folder_id = create_folder(service, root_folder_name, os.getenv('DRIVE_FOLDER_ID'))
+
+          if root_folder_id:
+              for zip_file in ['student.zip', 'solution.zip']:
+                  subfolder_name = zip_file.replace('.zip', '')
+                  subfolder_id = create_folder(service, subfolder_name, root_folder_id)
+
+                  if subfolder_id:
+                      with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+                          zip_ref.extractall(subfolder_name)
+
+                      for root, _, files in os.walk(subfolder_name):
+                          for file in files:
+                              upload_file(service, os.path.join(root, file), subfolder_id)
+
+                      upload_file(service, zip_file, root_folder_id)
+          EOF
+          
+          python upload.py
+
+      - name: Cleanup
+        run: |
+          rm -f student.zip solution.zip
+          rm -rf student solution
