@@ -6,36 +6,7 @@ jobs:
   upload-to-drive:
     runs-on: ubuntu-latest
     steps:
-      - name: Get Latest Release Info
-        id: latest_release
-        run: |
-          RELEASE_INFO=$(curl -sH "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/latest)
-          VERSION=$(echo $RELEASE_INFO | jq -r .tag_name | sed 's/v//')
-          
-          STUDENT_URL=$(echo $RELEASE_INFO | jq -r '.assets[] | select(.name=="student.zip").browser_download_url')
-          SOLUTION_URL=$(echo $RELEASE_INFO | jq -r '.assets[] | select(.name=="solution.zip").browser_download_url')
-          
-          if [ -z "$STUDENT_URL" ] || [ -z "$SOLUTION_URL" ]; then
-            echo "Error: Missing release assets"
-            exit 1
-          fi
-          
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "student_url=$STUDENT_URL" >> $GITHUB_OUTPUT
-          echo "solution_url=$SOLUTION_URL" >> $GITHUB_OUTPUT
-
-      - name: Download Release Assets
-        run: |
-          for file in "student.zip ${{ steps.latest_release.outputs.student_url }}" "solution.zip ${{ steps.latest_release.outputs.solution_url }}"; do
-            set -- $file
-            echo "Downloading $1 from $2..."
-            curl -LH "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "$1" "$2"
-            if ! unzip -t "$1" > /dev/null 2>&1; then
-              echo "Error: $1 is not valid"
-              exit 1
-            fi
-          done
+      - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -45,14 +16,20 @@ jobs:
       - name: Install Dependencies
         run: pip install google-auth google-api-python-client
 
+      - name: Download Latest Release
+        uses: robinraju/release-downloader@v1.9
+        with:
+          latest: true
+          fileName: "*.zip"
+
       - name: Upload to Drive
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          VERSION: ${{ steps.latest_release.outputs.version }}
         run: |
+          VERSION=$(ls student.zip | sed 's/.*v\([0-9]*\).*/\1/')
           cat > upload.py << 'EOF'
           import os
           import zipfile
