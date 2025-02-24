@@ -6,28 +6,33 @@ jobs:
   upload-to-drive:
     runs-on: ubuntu-latest
     steps:
-      - name: Get Latest Release
+      - name: Get Latest Release Info
         id: latest_release
         run: |
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name | sed 's/v//')
-          echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-          echo "Latest version: $LATEST_VERSION"
+          RELEASE_INFO=$(curl -sH "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/latest)
+          VERSION=$(echo $RELEASE_INFO | jq -r .tag_name | sed 's/v//')
+          
+          STUDENT_URL=$(echo $RELEASE_INFO | jq -r '.assets[] | select(.name=="student.zip").browser_download_url')
+          SOLUTION_URL=$(echo $RELEASE_INFO | jq -r '.assets[] | select(.name=="solution.zip").browser_download_url')
+          
+          if [ -z "$STUDENT_URL" ] || [ -z "$SOLUTION_URL" ]; then
+            echo "Error: Missing release assets"
+            exit 1
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "student_url=$STUDENT_URL" >> $GITHUB_OUTPUT
+          echo "solution_url=$SOLUTION_URL" >> $GITHUB_OUTPUT
 
       - name: Download Release Assets
         run: |
-          # Download with error checking
-          for file in student.zip solution.zip; do
-            echo "Downloading $file..."
-            if curl -L -o "$file" "https://github.com/${{ github.repository }}/releases/download/v${{ steps.latest_release.outputs.version }}/$file"; then
-              echo "$file downloaded successfully"
-              if unzip -t "$file" > /dev/null; then
-                echo "$file verified as valid zip"
-              else
-                echo "Error: $file is not a valid zip file"
-                exit 1
-              fi
-            else
-              echo "Error downloading $file"
+          for file in "student.zip ${{ steps.latest_release.outputs.student_url }}" "solution.zip ${{ steps.latest_release.outputs.solution_url }}"; do
+            set -- $file
+            echo "Downloading $1 from $2..."
+            curl -LH "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "$1" "$2"
+            if ! unzip -t "$1" > /dev/null 2>&1; then
+              echo "Error: $1 is not valid"
               exit 1
             fi
           done
@@ -54,17 +59,7 @@ jobs:
           from google.oauth2.credentials import Credentials
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
-
-          # Verify files exist and are valid
-          for zip_file in ['student.zip', 'solution.zip']:
-              if not os.path.exists(zip_file):
-                  raise FileNotFoundError(f"{zip_file} not found")
-              try:
-                  with zipfile.ZipFile(zip_file, 'r') as zf:
-                      zf.testzip()
-              except zipfile.BadZipFile:
-                  raise Exception(f"{zip_file} is not a valid zip file")
-
+          
           creds = Credentials(
               None,
               refresh_token=os.environ['REFRESH_TOKEN'],
@@ -72,10 +67,10 @@ jobs:
               client_id=os.environ['CLIENT_ID'],
               client_secret=os.environ['CLIENT_SECRET']
           )
-
+          
           service = build('drive', 'v3', credentials=creds)
           folder_name = f'VCS_V1.{os.environ["VERSION"]}'
-
+          
           folder = service.files().create(
               body={
                   'name': folder_name,
@@ -84,7 +79,7 @@ jobs:
               },
               fields='id'
           ).execute()
-
+          
           for zip_file in ['student.zip', 'solution.zip']:
               subfolder_name = zip_file.replace('.zip', '')
               subfolder = service.files().create(
@@ -95,10 +90,10 @@ jobs:
                   },
                   fields='id'
               ).execute()
-
+          
               with zipfile.ZipFile(zip_file, 'r') as zip_ref:
                   zip_ref.extractall(subfolder_name)
-
+          
               for root, dirs, files in os.walk(subfolder_name):
                   for file in files:
                       file_path = os.path.join(root, file)
@@ -113,7 +108,7 @@ jobs:
                           media_body=media,
                           fields='id'
                       ).execute()
-
+          
               media = MediaFileUpload(zip_file, resumable=True)
               service.files().create(
                   body={
@@ -124,7 +119,7 @@ jobs:
                   fields='id'
               ).execute()
           EOF
-
+          
           python upload.py
 
       - name: Cleanup
