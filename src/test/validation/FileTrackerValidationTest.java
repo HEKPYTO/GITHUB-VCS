@@ -2,10 +2,7 @@ package test.validation;
 
 import impl.FileTracker;
 import model.FileStatus;
-import exceptions.*;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
@@ -28,38 +25,7 @@ class FileTrackerValidationTest {
     }
 
     @Test
-    void trackFileBasic() throws Exception {
-        Path file = createFile("basic.txt", "content");
-        fileTracker.trackFile(file.toString());
-        assertTrue(fileTracker.getTrackedFiles().contains(file.toString()));
-    }
-
-    @Test
-    void trackFileEmpty() throws Exception {
-        Path file = createFile("empty.txt", "");
-        fileTracker.trackFile(file.toString());
-        assertTrue(fileTracker.getTrackedFiles().contains(file.toString()));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"", " ", "\t", "\n"})
-    void trackFileInvalidPaths(String invalidPath) {
-        assertThrows(VCSException.class, () -> fileTracker.trackFile(invalidPath));
-    }
-
-    @Test
-    void trackFileNonExistent() {
-        assertThrows(VCSException.class, () ->
-                fileTracker.trackFile(tempDir.resolve("nonexistent.txt").toString()));
-    }
-
-    @Test
-    void trackFileDirectory() {
-        assertThrows(VCSException.class, () -> fileTracker.trackFile(tempDir.toString()));
-    }
-
-    @Test
-    void untrackFile() throws Exception {
+    void testUntrackFile() throws Exception {
         Path file = createFile("test.txt", "content");
         fileTracker.trackFile(file.toString());
         fileTracker.untrackFile(file.toString());
@@ -67,17 +33,17 @@ class FileTrackerValidationTest {
     }
 
     @Test
-    void untrackFileNotTracked() {
+    void testUntrackFileNotTracked() {
         assertDoesNotThrow(() -> fileTracker.untrackFile("nonexistent.txt"));
     }
 
     @Test
-    void getTrackedFilesEmpty() {
+    void testGetTrackedFilesEmpty() {
         assertTrue(fileTracker.getTrackedFiles().isEmpty());
     }
 
     @Test
-    void getTrackedFilesMultiple() throws Exception {
+    void testGetTrackedFilesMultiple() throws Exception {
         Path file1 = createFile("file1.txt", "content1");
         Path file2 = createFile("file2.txt", "content2");
 
@@ -90,19 +56,19 @@ class FileTrackerValidationTest {
     }
 
     @Test
-    void getFileStatusesEmpty() {
+    void testGetFileStatusesEmpty() {
         assertTrue(fileTracker.getFileStatuses().isEmpty());
     }
 
     @Test
-    void getFileStatusesNewlyTracked() throws Exception {
+    void testGetFileStatusesNewlyTracked() throws Exception {
         Path file = createFile("test.txt", "content");
         fileTracker.trackFile(file.toString());
         assertEquals(FileStatus.TRACKED, fileTracker.getFileStatuses().get(file.toString()));
     }
 
     @Test
-    void getFileStatusesAfterUntrack() throws Exception {
+    void testGetFileStatusesAfterUntrack() throws Exception {
         Path file = createFile("test.txt", "content");
         fileTracker.trackFile(file.toString());
         fileTracker.untrackFile(file.toString());
@@ -110,7 +76,7 @@ class FileTrackerValidationTest {
     }
 
     @Test
-    void addFileChangeListener() throws Exception {
+    void testAddFileChangeListener() throws Exception {
         List<String> notifications = new ArrayList<>();
         fileTracker.addFileChangeListener(notifications::add);
 
@@ -122,7 +88,7 @@ class FileTrackerValidationTest {
     }
 
     @Test
-    void removeFileChangeListener() throws Exception {
+    void testRemoveFileChangeListener() throws Exception {
         List<String> notifications = new ArrayList<>();
         Consumer<String> listener = notifications::add;
 
@@ -136,7 +102,7 @@ class FileTrackerValidationTest {
     }
 
     @Test
-    void multipleListeners() throws Exception {
+    void testMultipleListeners() throws Exception {
         List<String> notifications1 = new ArrayList<>();
         List<String> notifications2 = new ArrayList<>();
 

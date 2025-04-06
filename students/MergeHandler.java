@@ -7,7 +7,7 @@ import exceptions.*;
 import java.util.*;
 import java.io.File;
 
-public class MergeHandler {
+public class MergeHandler implements Mergeable {
     private final VersionManager versionManager;
     private final List<ConflictInfo> currentConflicts;
     private final String repositoryPath;
