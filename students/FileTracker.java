@@ -30,15 +30,26 @@ public class FileTracker implements Trackable {
     }
 
     public boolean trackFile(File file) throws VCSException, IOException {
-        // -- BEGIN FILL CODE HERE -- *
+        if (!file.exists() || !file.isFile()) {
+            throw new FileOperationException.FileNotFoundException(file.getPath());
+        }
 
-        // -- ENDED FILL CODE HERE -- *
+        String hash = HashUtils.calculateFileHash(file);
+        Path objectsPath = Paths.get(repositoryPath, ".vcs", "objects");
+        Files.copy(file.toPath(), objectsPath.resolve(hash), StandardCopyOption.REPLACE_EXISTING);
+
+        FileMetadata metadata = new FileMetadata(file.getPath(), hash);
+        fileMetadata.put(file.getPath(), metadata);
+        trackedFiles.add(file.getPath());
+        notifyFileChanged(file.getPath());
+
+        return true;
     }
 
+    @Override
     public void trackFile(String filePath) throws VCSException, IOException {
-        // -- BEGIN FILL CODE HERE -- *
-
-        // -- ENDED FILL CODE HERE -- *
+        File file = new File(filePath);
+        trackFile(file);
     }
 
     public void untrackFile(String filePath) {

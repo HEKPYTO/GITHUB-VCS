@@ -7,7 +7,7 @@ import exceptions.*;
 import java.util.*;
 import java.io.File;
 
-public class MergeHandler implements Mergeable {
+public class MergeHandler {
     private final VersionManager versionManager;
     private final List<ConflictInfo> currentConflicts;
     private final String repositoryPath;
@@ -18,11 +18,30 @@ public class MergeHandler implements Mergeable {
         this.repositoryPath = versionManager.getRepositoryPath();
     }
 
+    @Override
     public boolean merge(String sourceVersion, String targetVersion) throws VCSException {
-        // -- BEGIN FILL CODE HERE -- *
+        VersionInfo sourceInfo = versionManager.getVersion(sourceVersion);
+        VersionInfo targetInfo = versionManager.getVersion(targetVersion);
 
-        // -- ENDED FILL CODE HERE -- *
+        if (sourceInfo == null || targetInfo == null) {
+            throw new VersionException("Invalid version IDs");
+        }
+
+        currentConflicts.clear();
+
+        for (Map.Entry<String, String> entry : sourceInfo.getFileHashes().entrySet()) {
+            String filePath = entry.getKey();
+            String sourceHash = entry.getValue();
+            String targetHash = targetInfo.getFileHashes().get(filePath);
+
+            // -- BEGIN FILL CODE HERE -- *
+
+            // -- ENDED FILL CODE HERE -- *
+        }
+
+        return currentConflicts.isEmpty();
     }
+    // CONTINUE TO FILL BELOW
 
     private List<String> readFileLines(String hash) throws VCSException {
         File file = new File(repositoryPath + "/.vcs/objects/" + hash);
@@ -110,6 +129,10 @@ public class MergeHandler implements Mergeable {
 
     @Override
     public void resolveConflict(String filePath, ConflictResolution resolution) throws VCSException {
+        ConflictInfo conflict = findConflict(filePath);
+        if (conflict == null) {
+            throw new MergeConflictException("No conflict found for file: " + filePath);
+        }
         // -- BEGIN FILL CODE HERE -- *
 
         // -- ENDED FILL CODE HERE -- *
